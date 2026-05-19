@@ -1,9 +1,18 @@
 package repository
 
-import models "github.com/LifeforDream/gometrics/internal/model"
+import (
+	"maps"
+	"slices"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
+)
 
 type MemStorage struct {
 	store map[string]models.Metrics
+}
+
+func (m *MemStorage) GetAll() []models.Metrics {
+	return slices.Collect(maps.Values(m.store))
 }
 
 func (m *MemStorage) GetMetric(name string) (models.Metrics, bool) {

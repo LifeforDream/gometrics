@@ -1,12 +1,23 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	merrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/LifeforDream/gometrics/internal/service"
+	"github.com/go-chi/chi/v5"
 )
+
+var PAGE_HTML = `<html>
+<body>
+<h1> Known Metrics: </h1>
+%s
+</body>
+</html>
+`
 
 type Handler struct {
 	service *service.MetricService
@@ -16,16 +27,46 @@ func NewHandler(service *service.MetricService) *Handler {
 	return &Handler{service: service}
 }
 
+func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	var metricslist []string
+	metrics := h.service.GetMetrics()
+	if len(metrics) > 0 {
+		metricslist = append(metricslist, "<ul>")
+		for _, metric := range metrics {
+			metricslist = append(metricslist, fmt.Sprintf("<li>%s</li>", metric))
+		}
+		metricslist = append(metricslist, "</ul>")
+	}
+	page := fmt.Sprintf(PAGE_HTML, strings.Join(metricslist, "\r\n"))
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(page))
+}
+
+func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
+	metricType := strings.ToLower(chi.URLParam(r, "type"))
+	metricName := strings.ToLower(chi.URLParam(r, "name"))
+
+	value, err := h.service.GetMetric(metricType, metricName)
+	if err != nil {
+		if _, ok := err.(merrors.InvalidMetricType); ok {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(value))
+}
+
 func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	var servErr error
 
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	metricType := r.PathValue("type")
-	metricName := r.PathValue("name")
-	metricValue := r.PathValue("value")
+	metricType := strings.ToLower(chi.URLParam(r, "type"))
+	metricName := strings.ToLower(chi.URLParam(r, "name"))
+	metricValue := strings.ToLower(chi.URLParam(r, "value"))
 
 	switch metricType {
 	case "gauge":

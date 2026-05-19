@@ -3,10 +3,147 @@ package service
 import (
 	"testing"
 
+	models "github.com/LifeforDream/gometrics/internal/model"
 	repository "github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGetMetrics(t *testing.T) {
+	type metric struct {
+		mtype string
+		name  string
+		value float64
+	}
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for receiver constructor.
+		repo  repository.MetricRepo
+		input []metric
+		want  []string
+	}{
+		{
+			name: "get gauge and a counter",
+			repo: &repository.MemStorage{},
+			input: []metric{
+				{"counter", "pollcount", float64(2)},
+				{"gauge", "alloc", 1.25},
+			},
+			want: []string{
+				"pollcount 2",
+				"alloc 1.250000",
+			},
+		},
+		{
+			name: "get no metrics",
+			repo: &repository.MemStorage{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewMetricService(tt.repo)
+			for _, metric := range tt.input {
+				tt.repo.SetMetric(models.Metrics{ID: metric.name, MType: metric.mtype, Value: &metric.value})
+			}
+			got := s.GetMetrics()
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+func TestGetMetric(t *testing.T) {
+	floatPtr := func(f float64) *float64 { return &f }
+	type input struct {
+		name       string
+		metricType string
+	}
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for receiver constructor.
+		repo  repository.MetricRepo
+		setUp []models.Metrics
+		// Named input parameters for target function.
+		input   input
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "get valid counter",
+			repo: &repository.MemStorage{},
+			setUp: []models.Metrics{
+				{ID: "pollcount", MType: "counter", Value: floatPtr(2)},
+			},
+			input: input{
+				name:       "pollcount",
+				metricType: "counter",
+			},
+			want:    "2",
+			wantErr: false,
+		},
+		{
+			name: "get valid gauge",
+			repo: &repository.MemStorage{},
+			setUp: []models.Metrics{
+				{ID: "alloc", MType: "gauge", Value: floatPtr(1.25)},
+			},
+			input: input{
+				name:       "alloc",
+				metricType: "gauge",
+			},
+			want:    "1.25",
+			wantErr: false,
+		},
+		{
+			name: "metric not found",
+			repo: &repository.MemStorage{},
+			input: input{
+				name:       "whatever",
+				metricType: "counter",
+			},
+			wantErr: true,
+		},
+		{
+			name: "incorrect metric type",
+			repo: &repository.MemStorage{},
+			setUp: []models.Metrics{
+				{ID: "pollcount", MType: "counter", Value: floatPtr(2)},
+			},
+			input: input{
+				name:       "pollcount",
+				metricType: "gauge",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid metric type",
+			repo: &repository.MemStorage{},
+			setUp: []models.Metrics{
+				{ID: "pollcount", MType: "counter", Value: floatPtr(2)},
+			},
+			input: input{
+				name:       "pollcount",
+				metricType: "whatever",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := NewMetricService(tt.repo)
+			for _, metric := range tt.setUp {
+				tt.repo.SetMetric(metric)
+			}
+
+			got, gotErr := s.GetMetric(tt.input.metricType, tt.input.name)
+			if tt.wantErr {
+				require.Error(t, gotErr, "Unexpected success on err %s", gotErr)
+			} else {
+				require.NoError(t, gotErr, "Unexpected error %s", gotErr)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
 
 func TestUpdateGauge(t *testing.T) {
 

@@ -1,6 +1,9 @@
 package service
 
 import (
+	"fmt"
+	"strconv"
+
 	models "github.com/LifeforDream/gometrics/internal/model"
 	merrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	repository "github.com/LifeforDream/gometrics/internal/repository"
@@ -12,6 +15,45 @@ type MetricService struct {
 
 func NewMetricService(repo repository.MetricRepo) *MetricService {
 	return &MetricService{repo: repo}
+}
+
+func (s *MetricService) GetMetrics() []string {
+	metrics := s.repo.GetAll()
+	var out []string
+	for _, v := range metrics {
+		switch v.MType {
+		case models.Gauge:
+			out = append(out, fmt.Sprintf("%s %f", v.ID, *v.Value))
+		case models.Counter:
+			out = append(out, fmt.Sprintf("%s %d", v.ID, int64(*v.Value)))
+		}
+	}
+	return out
+}
+
+func (s *MetricService) GetMetric(metricType, name string) (string, error) {
+	metric, ok := s.repo.GetMetric(name)
+	if !ok {
+		return "", merrors.MetricNotFound{MetricName: name}
+	}
+	if metric.MType != metricType {
+		return "", merrors.InvalidMetricType{
+			ExistingType: metric.MType,
+			NewType:      metricType,
+			MetricName:   name,
+		}
+	}
+	switch metric.MType {
+	case models.Gauge:
+		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
+	case models.Counter:
+		return strconv.FormatInt(int64(*metric.Value), 10), nil
+	}
+	return "", merrors.InvalidMetricType{
+		ExistingType: metric.MType,
+		NewType:      metricType,
+		MetricName:   name,
+	}
 }
 
 func (s *MetricService) UpdateGauge(name string, value float64) error {
@@ -37,9 +79,7 @@ func (s *MetricService) UpdateGauge(name string, value float64) error {
 func (s *MetricService) UpdateCounter(name string, value int64) error {
 	var startVal int64
 	curVal, ok := s.repo.GetMetric(name)
-	if !ok {
-		startVal = int64(0)
-	} else {
+	if ok {
 		if curVal.MType != models.Counter {
 			return merrors.InvalidMetricType{
 				ExistingType: curVal.MType,
