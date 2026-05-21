@@ -9,7 +9,7 @@ func main() {
 	cfg := agent.Config{
 		PollInterval:   agentOptions.pollInterval,
 		ReportInterval: agentOptions.reportInterval,
-		ServerAddr:     agentOptions.address,
+		ServerAddr:     agentOptions.schema + agentOptions.address,
 	}
 	a := agent.New(cfg)
 	a.Run()
