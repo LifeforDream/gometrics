@@ -18,7 +18,7 @@ func TestGetMetrics(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for receiver constructor.
-		repo  repository.MetricRepo
+		repo  MetricRepo
 		input []metric
 		want  []string
 	}{
@@ -60,7 +60,7 @@ func TestGetMetric(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for receiver constructor.
-		repo  repository.MetricRepo
+		repo  MetricRepo
 		setUp []models.Metrics
 		// Named input parameters for target function.
 		input   input

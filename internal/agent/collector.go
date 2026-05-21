@@ -42,7 +42,7 @@ func buildSnapshot(memStats runtime.MemStats, pollCount int) map[string]AgentMet
 	}
 }
 
-func collect(interval time.Duration, c chan map[string]AgentMetric) {
+func collect(interval int, c chan map[string]AgentMetric) {
 	var memStats runtime.MemStats
 	pollCount := 0
 	for {
@@ -54,6 +54,6 @@ func collect(interval time.Duration, c chan map[string]AgentMetric) {
 		default:
 		}
 		c <- buildSnapshot(memStats, pollCount)
-		time.Sleep(interval)
+		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }

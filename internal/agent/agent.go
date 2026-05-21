@@ -1,17 +1,13 @@
 package agent
 
-import (
-	"time"
-)
-
 type AgentMetric struct {
 	Type  string
 	Value float64
 }
 
 type Config struct {
-	PollInterval   time.Duration
-	ReportInterval time.Duration
+	PollInterval   int
+	ReportInterval int
 	ServerAddr     string
 }
 

@@ -5,15 +5,20 @@ import (
 	"strconv"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
-	merrors "github.com/LifeforDream/gometrics/internal/model/errors"
-	repository "github.com/LifeforDream/gometrics/internal/repository"
+	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 )
 
-type MetricService struct {
-	repo repository.MetricRepo
+type MetricRepo interface {
+	GetAll() []models.Metrics
+	GetMetric(name string) (models.Metrics, bool)
+	SetMetric(metricVal models.Metrics)
 }
 
-func NewMetricService(repo repository.MetricRepo) *MetricService {
+type MetricService struct {
+	repo MetricRepo
+}
+
+func NewMetricService(repo MetricRepo) *MetricService {
 	return &MetricService{repo: repo}
 }
 
@@ -34,10 +39,10 @@ func (s *MetricService) GetMetrics() []string {
 func (s *MetricService) GetMetric(metricType, name string) (string, error) {
 	metric, ok := s.repo.GetMetric(name)
 	if !ok {
-		return "", merrors.MetricNotFound{MetricName: name}
+		return "", myErrors.MetricNotFound
 	}
 	if metric.MType != metricType {
-		return "", merrors.InvalidMetricType{
+		return "", myErrors.InvalidMetricType{
 			ExistingType: metric.MType,
 			NewType:      metricType,
 			MetricName:   name,
@@ -49,7 +54,7 @@ func (s *MetricService) GetMetric(metricType, name string) (string, error) {
 	case models.Counter:
 		return strconv.FormatInt(int64(*metric.Value), 10), nil
 	}
-	return "", merrors.InvalidMetricType{
+	return "", myErrors.InvalidMetricType{
 		ExistingType: metric.MType,
 		NewType:      metricType,
 		MetricName:   name,
@@ -60,7 +65,7 @@ func (s *MetricService) UpdateGauge(name string, value float64) error {
 	curVal, ok := s.repo.GetMetric(name)
 	if ok {
 		if curVal.MType != models.Gauge {
-			return merrors.InvalidMetricType{
+			return myErrors.InvalidMetricType{
 				ExistingType: curVal.MType,
 				NewType:      models.Gauge,
 				MetricName:   name,
@@ -81,7 +86,7 @@ func (s *MetricService) UpdateCounter(name string, value int64) error {
 	curVal, ok := s.repo.GetMetric(name)
 	if ok {
 		if curVal.MType != models.Counter {
-			return merrors.InvalidMetricType{
+			return myErrors.InvalidMetricType{
 				ExistingType: curVal.MType,
 				NewType:      models.Counter,
 				MetricName:   name,

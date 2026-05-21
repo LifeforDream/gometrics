@@ -10,10 +10,10 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
-func send(interval time.Duration, c chan map[string]AgentMetric, serverAddress string) {
+func send(interval int, c chan map[string]AgentMetric, serverAddress string) {
 	client := &http.Client{}
 	for {
-		time.Sleep(interval)
+		time.Sleep(time.Duration(interval) * time.Second)
 		metrics := <-c
 		for name, metric := range metrics {
 			// send to goroutine?

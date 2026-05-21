@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
-	merrors "github.com/LifeforDream/gometrics/internal/model/errors"
+	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5"
 )
@@ -39,8 +41,8 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	page := fmt.Sprintf(PAGE_HTML, strings.Join(metricslist, "\r\n"))
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(page))
 }
 
@@ -50,7 +52,9 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 
 	value, err := h.service.GetMetric(metricType, metricName)
 	if err != nil {
-		if _, ok := err.(merrors.InvalidMetricType); ok {
+		var invalidTypeErr myErrors.InvalidMetricType
+		if errors.As(err, &invalidTypeErr) {
+			log.Printf("Invalid metric type: %s", invalidTypeErr.NewType)
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -88,14 +92,13 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if servErr != nil {
-		_, ok := servErr.(merrors.InvalidMetricType)
-		if ok {
+		var invalidTypeErr myErrors.InvalidMetricType
+		if errors.As(servErr, &invalidTypeErr) {
+			log.Printf("Invalid metric type: %s", invalidTypeErr.NewType)
 			w.WriteHeader(http.StatusBadRequest)
 			return
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
 		}
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 	w.WriteHeader(http.StatusOK)
 }
