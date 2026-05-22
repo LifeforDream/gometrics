@@ -11,7 +11,8 @@ import (
 type MetricRepo interface {
 	GetAll() []models.Metrics
 	GetMetric(name string) (models.Metrics, bool)
-	SetMetric(metricVal models.Metrics)
+	SetGauge(metric models.Metrics) error
+	UpdateCounter(metric models.Metrics) error
 }
 
 type MetricService struct {
@@ -62,44 +63,21 @@ func (s *MetricService) GetMetric(metricType, name string) (string, error) {
 }
 
 func (s *MetricService) UpdateGauge(name string, value float64) error {
-	curVal, ok := s.repo.GetMetric(name)
-	if ok {
-		if curVal.MType != models.Gauge {
-			return myErrors.InvalidMetricType{
-				ExistingType: curVal.MType,
-				NewType:      models.Gauge,
-				MetricName:   name,
-			}
-		}
-	}
 	metric := models.Metrics{
 		ID:    name,
 		MType: models.Gauge,
 		Value: &value,
 	}
-	s.repo.SetMetric(metric)
-	return nil
+	err := s.repo.SetGauge(metric)
+	return err
 }
 
 func (s *MetricService) UpdateCounter(name string, value int64) error {
-	var startVal int64
-	curVal, ok := s.repo.GetMetric(name)
-	if ok {
-		if curVal.MType != models.Counter {
-			return myErrors.InvalidMetricType{
-				ExistingType: curVal.MType,
-				NewType:      models.Counter,
-				MetricName:   name,
-			}
-		}
-		startVal = int64(*curVal.Value)
-	}
-	newVal := float64(startVal + value)
 	metric := models.Metrics{
 		ID:    name,
 		MType: models.Counter,
-		Value: &newVal,
+		Delta: &value,
 	}
-	s.repo.SetMetric(metric)
-	return nil
+	err := s.repo.UpdateCounter(metric)
+	return err
 }

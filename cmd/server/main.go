@@ -19,7 +19,7 @@ func main() {
 
 func run() error {
 	log.Printf("Running server on %s", serverOptions.runAddr)
-	svc := service.NewMetricService(&repository.MemStorage{})
+	svc := service.NewMetricService(repository.NewMemStorage())
 	h := handler.NewHandler(svc)
 	return http.ListenAndServe(serverOptions.runAddr, router.MetricsRouter(h))
 }

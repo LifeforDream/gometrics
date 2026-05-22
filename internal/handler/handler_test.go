@@ -54,18 +54,18 @@ func TestGetMetrics(t *testing.T) {
 			want:  []metric{{"gauge", "alloc", 1.25}},
 		},
 	}
-	r := chi.NewRouter()
-	service := service.NewMetricService(&repository.MemStorage{})
-
-	h := NewHandler(service)
-	r.Get("/", h.GetMetrics)
-
-	ts := httptest.NewServer(r)
-	defer ts.Close()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// arrange
+			r := chi.NewRouter()
+			service := service.NewMetricService(repository.NewMemStorage())
+
+			h := NewHandler(service)
+			r.Get("/", h.GetMetrics)
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
 			for _, metric := range tt.input {
 				switch metric.mtype {
 				case "counter":
@@ -125,19 +125,21 @@ func TestGetMetric(t *testing.T) {
 			want:  want{404, ""},
 		},
 	}
-	r := chi.NewRouter()
-	service := service.NewMetricService(&repository.MemStorage{})
-	service.UpdateCounter("pollcount", 2)
-	service.UpdateGauge("alloc", 1.25)
-
-	h := NewHandler(service)
-	r.Get("/value/{type}/{name}", h.GetMetric)
-
-	ts := httptest.NewServer(r)
-	defer ts.Close()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// arrange
+			r := chi.NewRouter()
+			service := service.NewMetricService(repository.NewMemStorage())
+			service.UpdateCounter("pollcount", 2)
+			service.UpdateGauge("alloc", 1.25)
+
+			h := NewHandler(service)
+			r.Get("/value/{type}/{name}", h.GetMetric)
+
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
 			url := fmt.Sprintf("/value/%s/%s", tt.input.metricType, tt.input.metricName)
 			resp, get := testRequest(t, ts, http.MethodGet, url)
 
@@ -160,6 +162,7 @@ func TestUpdateMetric(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
+		setUp []inputParams
 		input inputParams
 		want  want
 	}{
@@ -175,7 +178,9 @@ func TestUpdateMetric(t *testing.T) {
 		},
 		{
 			name: "type conflict: counter update on existing gauge",
-			//only works after valid gauge update
+			setUp: []inputParams{
+				{method: http.MethodPost, metricType: "gauge", metricName: "Alloc", metricValue: "23.5"},
+			},
 			input: inputParams{
 				method:      http.MethodPost,
 				metricType:  "counter",
@@ -235,17 +240,24 @@ func TestUpdateMetric(t *testing.T) {
 			want: want{statusCode: http.StatusMethodNotAllowed},
 		},
 	}
-	r := chi.NewRouter()
-	service := service.NewMetricService(&repository.MemStorage{})
-
-	h := NewHandler(service)
-	r.Post("/update/{type}/{name}/{value}", h.UpdateMetric)
-
-	ts := httptest.NewServer(r)
-	defer ts.Close()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			//arrange
+			r := chi.NewRouter()
+			service := service.NewMetricService(repository.NewMemStorage())
+
+			h := NewHandler(service)
+			r.Post("/update/{type}/{name}/{value}", h.UpdateMetric)
+
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
+			for _, s := range tt.setUp {
+				path := fmt.Sprintf("/update/%s/%s/%s", s.metricType, s.metricName, s.metricValue)
+				testRequest(t, ts, s.method, path)
+			}
+
 			path := fmt.Sprintf("/update/%s/%s/%s", tt.input.metricType, tt.input.metricName, tt.input.metricValue)
 			resp, _ := testRequest(t, ts, tt.input.method, path)
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)

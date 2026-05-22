@@ -13,7 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-var PAGE_HTML = `<html>
+const pageHtml = `<html>
 <body>
 <h1> Known Metrics: </h1>
 %s
@@ -39,7 +39,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 		metricslist = append(metricslist, "</ul>")
 	}
-	page := fmt.Sprintf(PAGE_HTML, strings.Join(metricslist, "\r\n"))
+	page := fmt.Sprintf(pageHtml, strings.Join(metricslist, "\r\n"))
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
@@ -99,6 +99,7 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 }

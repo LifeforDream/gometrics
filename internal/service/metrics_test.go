@@ -9,25 +9,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var floatPtr = func(f float64) *float64 { return &f }
+var intPtr = func(i int64) *int64 { return &i }
+
 func TestGetMetrics(t *testing.T) {
-	type metric struct {
-		mtype string
-		name  string
-		value float64
-	}
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for receiver constructor.
 		repo  MetricRepo
-		input []metric
+		input []models.Metrics
 		want  []string
 	}{
 		{
 			name: "get gauge and a counter",
-			repo: &repository.MemStorage{},
-			input: []metric{
-				{"counter", "pollcount", float64(2)},
-				{"gauge", "alloc", 1.25},
+			repo: repository.NewMemStorage(),
+			input: []models.Metrics{
+				{MType: "counter", ID: "pollcount", Delta: intPtr(2)},
+				{MType: "gauge", ID: "alloc", Value: floatPtr(1.25)},
 			},
 			want: []string{
 				"pollcount 2",
@@ -36,14 +34,18 @@ func TestGetMetrics(t *testing.T) {
 		},
 		{
 			name: "get no metrics",
-			repo: &repository.MemStorage{},
+			repo: repository.NewMemStorage(),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.input {
-				tt.repo.SetMetric(models.Metrics{ID: metric.name, MType: metric.mtype, Value: &metric.value})
+				if metric.MType == "counter" {
+					tt.repo.UpdateCounter(metric)
+				} else {
+					tt.repo.SetGauge(metric)
+				}
 			}
 			got := s.GetMetrics()
 			assert.ElementsMatch(t, tt.want, got)
@@ -52,7 +54,6 @@ func TestGetMetrics(t *testing.T) {
 }
 
 func TestGetMetric(t *testing.T) {
-	floatPtr := func(f float64) *float64 { return &f }
 	type input struct {
 		name       string
 		metricType string
@@ -69,9 +70,9 @@ func TestGetMetric(t *testing.T) {
 	}{
 		{
 			name: "get valid counter",
-			repo: &repository.MemStorage{},
+			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Value: floatPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -82,7 +83,7 @@ func TestGetMetric(t *testing.T) {
 		},
 		{
 			name: "get valid gauge",
-			repo: &repository.MemStorage{},
+			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
 				{ID: "alloc", MType: "gauge", Value: floatPtr(1.25)},
 			},
@@ -95,7 +96,7 @@ func TestGetMetric(t *testing.T) {
 		},
 		{
 			name: "metric not found",
-			repo: &repository.MemStorage{},
+			repo: repository.NewMemStorage(),
 			input: input{
 				name:       "whatever",
 				metricType: "counter",
@@ -104,9 +105,9 @@ func TestGetMetric(t *testing.T) {
 		},
 		{
 			name: "incorrect metric type",
-			repo: &repository.MemStorage{},
+			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Value: floatPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -116,9 +117,9 @@ func TestGetMetric(t *testing.T) {
 		},
 		{
 			name: "invalid metric type",
-			repo: &repository.MemStorage{},
+			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Value: floatPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -131,7 +132,11 @@ func TestGetMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.setUp {
-				tt.repo.SetMetric(metric)
+				if metric.MType == "counter" {
+					tt.repo.UpdateCounter(metric)
+				} else {
+					tt.repo.SetGauge(metric)
+				}
 			}
 
 			got, gotErr := s.GetMetric(tt.input.metricType, tt.input.name)
@@ -169,7 +174,7 @@ func TestUpdateGauge(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &repository.MemStorage{}
+			repo := repository.NewMemStorage()
 			s := NewMetricService(repo)
 			for _, val := range tt.values {
 				s.UpdateGauge(tt.mname, val)
@@ -205,7 +210,7 @@ func TestUpdateCounter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &repository.MemStorage{}
+			repo := repository.NewMemStorage()
 			s := NewMetricService(repo)
 			for _, val := range tt.values {
 				s.UpdateCounter(tt.mname, val)
@@ -219,7 +224,7 @@ func TestUpdateCounter(t *testing.T) {
 }
 
 func TestMetricConflicts(t *testing.T) {
-	repo := &repository.MemStorage{}
+	repo := repository.NewMemStorage()
 	s := NewMetricService(repo)
 
 	// Create a gauge metric
