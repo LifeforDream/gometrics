@@ -1,5 +1,7 @@
 package agent
 
+import "context"
+
 type AgentMetric struct {
 	Type  string
 	Value float64
@@ -19,8 +21,8 @@ func New(cfg Config) *Agent {
 	return &Agent{cfg: cfg}
 }
 
-func (a *Agent) Run() {
+func (a *Agent) Run(ctx context.Context) {
 	c := make(chan map[string]AgentMetric, 1)
-	go collect(a.cfg.PollInterval, c)
-	go send(a.cfg.ReportInterval, c, a.cfg.ServerAddr)
+	go collect(ctx, a.cfg.PollInterval, c)
+	go send(ctx, a.cfg.ReportInterval, c, a.cfg.ServerAddr)
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -10,17 +11,27 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
-func send(interval int, c chan map[string]AgentMetric, serverAddress string) {
+func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string) {
 	client := &http.Client{}
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+
 	for {
-		time.Sleep(time.Duration(interval) * time.Second)
-		metrics := <-c
-		for name, metric := range metrics {
-			// send to goroutine?
-			err := sendMetric(metric.Type, name, serverAddress, metric.Value, client)
-			if err != nil {
-				log.Printf("Error sending metric %s: %v\n", name, err)
+		select {
+		case <-ticker.C:
+			select {
+			case metrics := <-c:
+				for name, metric := range metrics {
+					err := sendMetric(metric.Type, name, serverAddress, metric.Value, client)
+					if err != nil {
+						log.Printf("Error sending metric %s: %v\n", name, err)
+					}
+				}
+			case <-ctx.Done():
+				return
 			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }

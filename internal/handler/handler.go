@@ -21,8 +21,15 @@ const pageHtml = `<html>
 </html>
 `
 
+type MetricService interface {
+	GetMetrics() []string
+	GetMetric(metricType string, name string) (string, error)
+	UpdateGauge(name string, value float64) error
+	UpdateCounter(name string, value int64) error
+}
+
 type Handler struct {
-	service *service.MetricService
+	service MetricService
 }
 
 func NewHandler(service *service.MetricService) *Handler {

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"math/rand"
 	"runtime"
 	"time"
@@ -42,18 +43,25 @@ func buildSnapshot(memStats runtime.MemStats, pollCount int) map[string]AgentMet
 	}
 }
 
-func collect(interval int, c chan map[string]AgentMetric) {
+func collect(ctx context.Context, interval int, c chan map[string]AgentMetric) {
 	var memStats runtime.MemStats
 	pollCount := 0
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+
 	for {
-		runtime.ReadMemStats(&memStats)
-		pollCount++
-		//drain channel
 		select {
-		case <-c:
-		default:
+		case <-ticker.C:
+			runtime.ReadMemStats(&memStats)
+			pollCount++
+			//drain channel
+			select {
+			case <-c:
+			default:
+			}
+			c <- buildSnapshot(memStats, pollCount)
+		case <-ctx.Done():
+			return
 		}
-		c <- buildSnapshot(memStats, pollCount)
-		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }

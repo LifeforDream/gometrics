@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"context"
 	"os"
 	"os/signal"
 
@@ -20,12 +20,10 @@ func main() {
 	}
 	a := agent.New(cfg)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
-	a.Run()
+	a.Run(ctx)
 
-	// Block until a signal is received.
-	s := <-c
-	log.Printf("Stopping metrics agent: %s", s)
+	<-ctx.Done()
 }
