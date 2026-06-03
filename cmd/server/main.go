@@ -11,15 +11,18 @@ import (
 )
 
 func main() {
-	parseFlags()
-	if err := run(); err != nil {
-		panic(err)
+	serverOptions, err := parseOptions()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := run(serverOptions); err != nil {
+		log.Fatal(err)
 	}
 }
 
-func run() error {
-	log.Printf("Running server on %s", serverOptions.runAddr)
+func run(serverOptions *ServerOptions) error {
+	log.Printf("Running server on %s", serverOptions.RunAddr)
 	svc := service.NewMetricService(repository.NewMemStorage())
 	h := handler.NewHandler(svc)
-	return http.ListenAndServe(serverOptions.runAddr, router.MetricsRouter(h))
+	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h))
 }

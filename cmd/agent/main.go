@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 
@@ -9,13 +10,16 @@ import (
 )
 
 func main() {
-	parseFlags()
+	agentOptions, err := parseOptions()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	serverAddr := constructAddress()
+	serverAddr := constructAddress(agentOptions)
 
 	cfg := agent.Config{
-		PollInterval:   agentOptions.pollInterval,
-		ReportInterval: agentOptions.reportInterval,
+		PollInterval:   agentOptions.PollInterval,
+		ReportInterval: agentOptions.ReportInterval,
 		ServerAddr:     serverAddr,
 	}
 	a := agent.New(cfg)

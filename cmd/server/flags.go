@@ -1,14 +1,30 @@
 package main
 
-import "flag"
+import (
+	"flag"
+	"os"
 
-var serverOptions struct {
-	runAddr string
+	"github.com/caarlos0/env/v6"
+)
+
+type ServerOptions struct {
+	RunAddr string `env:"ADDRESS"`
 }
 
-// parseFlags обрабатывает аргументы командной строки
-// и сохраняет их значения в соответствующих переменных
-func parseFlags() {
-	flag.StringVar(&serverOptions.runAddr, "a", "localhost:8080", "address and port to run server")
-	flag.Parse()
+func parseOptions(args ...string) (*ServerOptions, error) {
+	var serverOptions ServerOptions
+	fs := flag.NewFlagSet("server", flag.ExitOnError)
+
+	fs.StringVar(&serverOptions.RunAddr, "a", "localhost:8080", "address and port to run server")
+
+	if args == nil {
+		args = os.Args[1:]
+	}
+	fs.Parse(args)
+
+	err := env.Parse(&serverOptions)
+	if err != nil {
+		return nil, err
+	}
+	return &serverOptions, nil
 }
