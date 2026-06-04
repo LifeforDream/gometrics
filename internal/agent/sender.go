@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
+	"github.com/LifeforDream/gometrics/internal/logger"
 	models "github.com/LifeforDream/gometrics/internal/model"
+	"go.uber.org/zap"
 )
 
 func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string) {
@@ -24,7 +25,7 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 				for name, metric := range metrics {
 					err := sendMetric(metric.Type, name, serverAddress, metric.Value, client)
 					if err != nil {
-						log.Printf("Error sending metric %s: %v\n", name, err)
+						logger.Log.Error("Error sending metric", zap.String("metricName", name), zap.Error(err))
 					}
 				}
 			case <-ctx.Done():

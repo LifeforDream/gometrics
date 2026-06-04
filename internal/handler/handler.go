@@ -3,14 +3,15 @@ package handler
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/LifeforDream/gometrics/internal/logger"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 const pageHtml = `<html>
@@ -61,7 +62,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(err, &invalidTypeErr) {
-			log.Printf("Invalid metric type: %s", invalidTypeErr.NewType)
+			logger.Log.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -101,7 +102,7 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			log.Printf("Invalid metric type: %s", invalidTypeErr.NewType)
+			logger.Log.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

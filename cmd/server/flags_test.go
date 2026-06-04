@@ -15,27 +15,27 @@ func TestParseOptions(t *testing.T) {
 	}{
 		{
 			name:      "all envs overwrite flags",
-			args:      []string{"-a", "localhost:8085"},
-			envParams: map[string]string{"ADDRESS": "localhost:8082"},
-			expected:  ServerOptions{"localhost:8082"},
+			args:      []string{"-a", "localhost:8085", "-l", "debug"},
+			envParams: map[string]string{"ADDRESS": "localhost:8082", "LOG_LEVEL": "warn"},
+			expected:  ServerOptions{RunAddr: "localhost:8082", LogLevel: "warn"},
 		},
 		{
 			name:      "envs don't overwrite when empty",
 			args:      []string{"-a", "localhost:8085"},
 			envParams: map[string]string{},
-			expected:  ServerOptions{"localhost:8085"},
+			expected:  ServerOptions{RunAddr: "localhost:8085"},
 		},
 		{
 			name:      "envs write when empty parameter",
 			args:      []string{},
 			envParams: map[string]string{"ADDRESS": "localhost:8082"},
-			expected:  ServerOptions{"localhost:8082"},
+			expected:  ServerOptions{RunAddr: "localhost:8082"},
 		},
 		{
 			name:      "use defaults",
 			args:      []string{},
 			envParams: map[string]string{},
-			expected:  ServerOptions{"localhost:8080"},
+			expected:  ServerOptions{RunAddr: "localhost:8080"},
 		},
 	}
 	for _, tt := range tests {

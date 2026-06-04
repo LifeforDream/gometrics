@@ -5,9 +5,11 @@ import (
 	"net/http"
 
 	"github.com/LifeforDream/gometrics/internal/handler"
+	"github.com/LifeforDream/gometrics/internal/logger"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -15,14 +17,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := run(serverOptions); err != nil {
+	if err := logger.Initialize(serverOptions.LogLevel); err != nil {
 		log.Fatal(err)
+	}
+	if err := run(serverOptions); err != nil {
+		logger.Log.Fatal("Failed to start application", zap.Error(err))
 	}
 }
 
 func run(serverOptions *ServerOptions) error {
-	log.Printf("Running server on %s", serverOptions.RunAddr)
+	logger.Log.Info("Running server", zap.String("address", serverOptions.RunAddr))
 	svc := service.NewMetricService(repository.NewMemStorage())
 	h := handler.NewHandler(svc)
-	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h))
+	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h, logger.WithLogging))
 }

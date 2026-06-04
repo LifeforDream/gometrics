@@ -1,12 +1,18 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/go-chi/chi/v5"
 )
 
-func MetricsRouter(h *handler.Handler) chi.Router {
+func MetricsRouter(h *handler.Handler, middlewares ...func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
+
+	for _, middleware := range middlewares {
+		r.Use(middleware)
+	}
 
 	r.Get("/", h.GetMetrics)
 	r.Get("/value/{type}/{name}", h.GetMetric)

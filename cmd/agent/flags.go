@@ -17,7 +17,7 @@ type AgentOptions struct {
 
 func parseOptions(args ...string) (*AgentOptions, error) {
 	var agentOptions AgentOptions
-	fs := flag.NewFlagSet("agent", flag.ExitOnError)
+	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
 	fs.StringVar(&agentOptions.Address, "a", "localhost:8080", "server address")
 	fs.BoolVar(&agentOptions.Secure, "secure", false, "flag to indicate usage of secure channel")
@@ -27,7 +27,9 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	if args == nil {
 		args = os.Args[1:]
 	}
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return nil, err
+	}
 
 	err := env.Parse(&agentOptions)
 	if err != nil {
