@@ -217,7 +217,7 @@ func TestUpdateCounter(t *testing.T) {
 			}
 			metric, ok := repo.GetMetric(tt.mname)
 			require.True(t, ok, "metric not found in repository")
-			require.Equal(t, float64(tt.wantVal), *metric.Value, "unexpected metric value")
+			require.Equal(t, tt.wantVal, *metric.Delta, "unexpected metric value")
 			require.Equal(t, "counter", metric.MType, "unexpected metric type")
 		})
 	}
@@ -264,7 +264,7 @@ func TestGetMetric(t *testing.T) {
 				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
 			},
 			input:   input{"pollcount", "counter"},
-			want:    models.Metrics{ID: "pollcount", MType: "counter", Value: floatPtr(2.0)},
+			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
 			wantErr: false,
 		},
 		{

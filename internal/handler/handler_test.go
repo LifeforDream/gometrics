@@ -141,7 +141,7 @@ func TestGetMetric(t *testing.T) {
 			service.UpdateGaugeByName("alloc", 1.25)
 
 			h := NewHandler(service)
-			r.Get("/value/{type}/{name}", h.GetMetric)
+			r.Get("/value/{type}/{name}", h.GetMetricValue)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -254,7 +254,7 @@ func TestUpdateMetric(t *testing.T) {
 			service := service.NewMetricService(repository.NewMemStorage())
 
 			h := NewHandler(service)
-			r.Post("/update/{type}/{name}/{value}", h.UpdateMetric)
+			r.Post("/update/{type}/{name}/{value}", h.UpdateMetricValue)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -300,7 +300,7 @@ func TestGetMetricJson(t *testing.T) {
 			name:        "valid counter request",
 			contentType: "application/json",
 			rawBody:     `{"id":"pollcount","type":"counter"}`,
-			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Value: floatPtr(2.0)}},
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: intPtr(2)}},
 		},
 		{
 			name:        "valid gauge request",
@@ -360,7 +360,7 @@ func TestGetMetricJson(t *testing.T) {
 			service.UpdateGauge(models.Metrics{ID: "alloc", MType: "gauge", Value: floatPtr(1.25)})
 
 			h := NewHandler(service)
-			r.Post("/value", h.GetMetricJson)
+			r.Post("/value", h.GetMetric)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
 
@@ -463,7 +463,7 @@ func TestUpdateMetricJson(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 			h := NewHandler(service)
-			r.Post("/update", h.UpdateMetricJson)
+			r.Post("/update", h.UpdateMetric)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
 

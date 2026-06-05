@@ -31,7 +31,7 @@ func (s *MetricService) GetMetrics() []string {
 		case models.Gauge:
 			out = append(out, fmt.Sprintf("%s %f", v.ID, *v.Value))
 		case models.Counter:
-			out = append(out, fmt.Sprintf("%s %d", v.ID, int64(*v.Value)))
+			out = append(out, fmt.Sprintf("%s %d", v.ID, *v.Delta))
 		}
 	}
 	return out
@@ -53,7 +53,7 @@ func (s *MetricService) GetMetricValue(metricType, name string) (string, error) 
 	case models.Gauge:
 		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
 	case models.Counter:
-		return strconv.FormatInt(int64(*metric.Value), 10), nil
+		return strconv.FormatInt(*metric.Delta, 10), nil
 	}
 	return "", myErrors.InvalidMetricType{
 		ExistingType: metric.MType,

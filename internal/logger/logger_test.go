@@ -44,7 +44,7 @@ func TestWithLogging(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// arrange: replace global logger with an observer
-			core, logs := observer.New(zapcore.InfoLevel)
+			core, logs := observer.New(zapcore.DebugLevel)
 			original := Log
 			Log = zap.New(core)
 			t.Cleanup(func() { Log = original })

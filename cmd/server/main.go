@@ -9,6 +9,7 @@ import (
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
@@ -29,5 +30,5 @@ func run(serverOptions *ServerOptions) error {
 	logger.Log.Info("Running server", zap.String("address", serverOptions.RunAddr))
 	svc := service.NewMetricService(repository.NewMemStorage())
 	h := handler.NewHandler(svc)
-	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h, logger.WithLogging))
+	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h, logger.WithLogging, middleware.StripSlashes))
 }

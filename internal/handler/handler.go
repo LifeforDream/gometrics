@@ -28,9 +28,7 @@ type MetricService interface {
 	GetMetrics() []string
 	GetMetricValue(metricType string, name string) (string, error)
 	GetMetric(metricType string, name string) (models.Metrics, error)
-	UpdateGaugeByName(name string, value float64) error
 	UpdateGauge(models.Metrics) error
-	UpdateCounterByName(name string, value int64) error
 	UpdateCounter(models.Metrics) error
 }
 
@@ -59,7 +57,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(page))
 }
 
-func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	metricType := strings.ToLower(chi.URLParam(r, "type"))
 	metricName := strings.ToLower(chi.URLParam(r, "name"))
 
@@ -78,7 +76,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(value))
 }
 
-func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 	var servErr error
 
 	metricType := strings.ToLower(chi.URLParam(r, "type"))
@@ -127,7 +125,7 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *Handler) GetMetricJson(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 		logger.Log.Debug("Invalid content-type", zap.String("content-type", ct))
 		w.WriteHeader(http.StatusBadRequest)
@@ -177,7 +175,7 @@ func (h *Handler) GetMetricJson(w http.ResponseWriter, r *http.Request) {
 	logger.Log.Debug("sending HTTP 200 response")
 }
 
-func (h *Handler) UpdateMetricJson(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 		logger.Log.Debug("Invalid content-type", zap.String("content-type", ct))
 		w.WriteHeader(http.StatusBadRequest)

@@ -71,7 +71,7 @@ func WithLogging(h http.Handler) http.Handler {
 			status = http.StatusOK
 		}
 
-		Log.Info("Request processed: ",
+		Log.Debug("Request processed: ",
 			zap.String("uri", uri),
 			zap.String("method", method),
 			zap.Duration("duration", duration),
