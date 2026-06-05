@@ -15,7 +15,9 @@ func MetricsRouter(h *handler.Handler, middlewares ...func(http.Handler) http.Ha
 	}
 
 	r.Get("/", h.GetMetrics)
+	r.Post("/value", h.GetMetricJson)
 	r.Get("/value/{type}/{name}", h.GetMetric)
+	r.Post("/update", h.UpdateMetricJson)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateMetric)
 
 	return r

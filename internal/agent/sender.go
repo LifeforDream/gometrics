@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,16 +40,32 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 }
 
 func sendMetric(metricType, metricName, serverAddress string, metricValue float64, client *http.Client) error {
-	var url string
+	var buf bytes.Buffer
+	var req models.Metrics
 	switch metricType {
 	case models.Counter:
-		url = fmt.Sprintf("%s/update/%s/%s/%d", serverAddress, metricType, metricName, int64(metricValue))
+		intVal := int64(metricValue)
+		req = models.Metrics{
+			ID:    metricName,
+			MType: metricType,
+			Delta: &intVal,
+		}
 	case models.Gauge:
-		url = fmt.Sprintf("%s/update/%s/%s/%f", serverAddress, metricType, metricName, metricValue)
+		req = models.Metrics{
+			ID:    metricName,
+			MType: metricType,
+			Value: &metricValue,
+		}
 	default:
 		return fmt.Errorf("unsupported metric type: %s", metricType)
 	}
-	resp, err := client.Post(url, "text/plain", nil)
+
+	enc := json.NewEncoder(&buf)
+	if err := enc.Encode(req); err != nil {
+		logger.Log.Debug("error encoding response", zap.Error(err))
+		return err
+	}
+	resp, err := client.Post(serverAddress+"/update", "application/json", &buf)
 	if err != nil {
 		return err
 	}

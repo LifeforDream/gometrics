@@ -37,7 +37,7 @@ func (s *MetricService) GetMetrics() []string {
 	return out
 }
 
-func (s *MetricService) GetMetric(metricType, name string) (string, error) {
+func (s *MetricService) GetMetricValue(metricType, name string) (string, error) {
 	metric, ok := s.repo.GetMetric(name)
 	if !ok {
 		return "", myErrors.MetricNotFound
@@ -62,7 +62,22 @@ func (s *MetricService) GetMetric(metricType, name string) (string, error) {
 	}
 }
 
-func (s *MetricService) UpdateGauge(name string, value float64) error {
+func (s *MetricService) GetMetric(metricType, name string) (models.Metrics, error) {
+	metric, ok := s.repo.GetMetric(name)
+	if !ok {
+		return models.Metrics{}, myErrors.MetricNotFound
+	}
+	if metric.MType != metricType {
+		return models.Metrics{}, myErrors.InvalidMetricType{
+			ExistingType: metric.MType,
+			NewType:      metricType,
+			MetricName:   name,
+		}
+	}
+	return metric, nil
+}
+
+func (s *MetricService) UpdateGaugeByName(name string, value float64) error {
 	metric := models.Metrics{
 		ID:    name,
 		MType: models.Gauge,
@@ -72,12 +87,20 @@ func (s *MetricService) UpdateGauge(name string, value float64) error {
 	return err
 }
 
-func (s *MetricService) UpdateCounter(name string, value int64) error {
+func (s *MetricService) UpdateGauge(metric models.Metrics) error {
+	return s.repo.SetGauge(metric)
+}
+
+func (s *MetricService) UpdateCounterByName(name string, delta int64) error {
 	metric := models.Metrics{
 		ID:    name,
 		MType: models.Counter,
-		Delta: &value,
+		Delta: &delta,
 	}
 	err := s.repo.UpdateCounter(metric)
 	return err
+}
+
+func (s *MetricService) UpdateCounter(metric models.Metrics) error {
+	return s.repo.UpdateCounter(metric)
 }

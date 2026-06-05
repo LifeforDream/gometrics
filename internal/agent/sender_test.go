@@ -1,12 +1,18 @@
 package agent
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/stretchr/testify/assert"
 )
+
+var floatPtr = func(f float64) *float64 { return &f }
+var intPtr = func(i int64) *int64 { return &i }
 
 func TestSendMetric(t *testing.T) {
 	tests := []struct {
@@ -15,7 +21,7 @@ func TestSendMetric(t *testing.T) {
 		metricType  string
 		metricName  string
 		metricValue float64
-		wantPath    string
+		wantMetric  models.Metrics
 		wantErr     bool
 	}{
 		{
@@ -23,7 +29,7 @@ func TestSendMetric(t *testing.T) {
 			metricType:  "counter",
 			metricName:  "pollCount",
 			metricValue: 5,
-			wantPath:    "/update/counter/pollCount/5",
+			wantMetric:  models.Metrics{ID: "pollCount", MType: "counter", Delta: intPtr(5)},
 			wantErr:     false,
 		},
 		{
@@ -31,7 +37,7 @@ func TestSendMetric(t *testing.T) {
 			metricType:  "gauge",
 			metricName:  "Alloc",
 			metricValue: 23.5,
-			wantPath:    "/update/gauge/Alloc/23.500000",
+			wantMetric:  models.Metrics{ID: "Alloc", MType: "gauge", Value: floatPtr(23.5)},
 			wantErr:     false,
 		},
 		{
@@ -39,17 +45,20 @@ func TestSendMetric(t *testing.T) {
 			metricType:  "invalid",
 			metricName:  "someMetric",
 			metricValue: 22,
-			wantPath:    "",
 			wantErr:     true,
 		},
 	}
 	//prepare
 	client := &http.Client{}
-	pathCh := make(chan string, 1)
+	bodyCh := make(chan []byte, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method, "unexpected HTTP method")
-		assert.Equal(t, "text/plain", r.Header.Get("Content-Type"), "unexpected Content-Type")
-		pathCh <- r.URL.Path
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "unexpected Content-Type")
+		reqBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		bodyCh <- reqBody
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -62,7 +71,9 @@ func TestSendMetric(t *testing.T) {
 			} else {
 				assert.NoError(t, gotErr)
 				// check path
-				assert.Equal(t, tt.wantPath, <-pathCh, "unexpected request path")
+				var actMetric models.Metrics
+				json.Unmarshal(<-bodyCh, &actMetric)
+				assert.Equal(t, tt.wantMetric, actMetric, "wrong metric send result")
 			}
 		})
 	}
