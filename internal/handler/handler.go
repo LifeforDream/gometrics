@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/LifeforDream/gometrics/internal/logger"
+	"github.com/LifeforDream/gometrics/internal/middlewares/logger"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/LifeforDream/gometrics/internal/service"

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/LifeforDream/gometrics/internal/logger"
+	"github.com/LifeforDream/gometrics/internal/middlewares/logger"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"go.uber.org/zap"
 )
@@ -39,9 +40,33 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 	}
 }
 
+func compress(b *bytes.Buffer) error {
+	// compresses data in place, modifies buffer
+	od, err := io.ReadAll(b)
+	b.Reset()
+
+	if err != nil {
+		return fmt.Errorf("failed to read from uncompressed data: %v", err)
+	}
+	w, err := gzip.NewWriterLevel(b, gzip.BestCompression)
+	if err != nil {
+		return fmt.Errorf("failed init compress writer: %v", err)
+	}
+	_, err = w.Write(od)
+	if err != nil {
+		return fmt.Errorf("failed write data to compress temporary buffer: %v", err)
+	}
+	err = w.Close()
+	if err != nil {
+		return fmt.Errorf("failed compress data: %v", err)
+	}
+	return nil
+}
+
 func sendMetric(metricType, metricName, serverAddress string, metricValue float64, client *http.Client) error {
 	var buf bytes.Buffer
 	var req models.Metrics
+
 	switch metricType {
 	case models.Counter:
 		intVal := int64(metricValue)
@@ -60,15 +85,31 @@ func sendMetric(metricType, metricName, serverAddress string, metricValue float6
 		return fmt.Errorf("unsupported metric type: %s", metricType)
 	}
 
+	// convert to json
 	enc := json.NewEncoder(&buf)
 	if err := enc.Encode(req); err != nil {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return err
 	}
-	resp, err := client.Post(serverAddress+"/update", "application/json", &buf)
+
+	// compress request
+	err := compress(&buf)
 	if err != nil {
 		return err
 	}
+
+	request, err := http.NewRequest(http.MethodPost, serverAddress+"/update", &buf)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Encoding", "gzip")
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
 	return nil

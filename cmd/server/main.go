@@ -5,7 +5,8 @@ import (
 	"net/http"
 
 	"github.com/LifeforDream/gometrics/internal/handler"
-	"github.com/LifeforDream/gometrics/internal/logger"
+	"github.com/LifeforDream/gometrics/internal/middlewares/compress"
+	"github.com/LifeforDream/gometrics/internal/middlewares/logger"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -30,5 +31,5 @@ func run(serverOptions *ServerOptions) error {
 	logger.Log.Info("Running server", zap.String("address", serverOptions.RunAddr))
 	svc := service.NewMetricService(repository.NewMemStorage())
 	h := handler.NewHandler(svc)
-	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h, logger.WithLogging, middleware.StripSlashes))
+	return http.ListenAndServe(serverOptions.RunAddr, router.MetricsRouter(h, logger.WithLogging, middleware.StripSlashes, compress.Compress))
 }

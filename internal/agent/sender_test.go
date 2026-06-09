@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var floatPtr = func(f float64) *float64 { return &f }
@@ -48,17 +50,24 @@ func TestSendMetric(t *testing.T) {
 			wantErr:     true,
 		},
 	}
-	//prepare
 	client := &http.Client{}
 	bodyCh := make(chan []byte, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method, "unexpected HTTP method")
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "unexpected Content-Type")
-		reqBody, err := io.ReadAll(r.Body)
+		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"), "unexpected Content-Encoding")
+		gr, err := gzip.NewReader(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
-		bodyCh <- reqBody
+		defer gr.Close()
+		body, err := io.ReadAll(gr)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		bodyCh <- body
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -70,9 +79,8 @@ func TestSendMetric(t *testing.T) {
 				assert.Error(t, gotErr)
 			} else {
 				assert.NoError(t, gotErr)
-				// check path
 				var actMetric models.Metrics
-				json.Unmarshal(<-bodyCh, &actMetric)
+				require.NoError(t, json.Unmarshal(<-bodyCh, &actMetric))
 				assert.Equal(t, tt.wantMetric, actMetric, "wrong metric send result")
 			}
 		})
