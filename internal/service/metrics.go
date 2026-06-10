@@ -9,7 +9,7 @@ import (
 )
 
 type MetricRepo interface {
-	GetAll() []models.Metrics
+	GetAllSlice() []models.Metrics
 	GetMetric(name string) (models.Metrics, bool)
 	SetGauge(metric models.Metrics) error
 	UpdateCounter(metric models.Metrics) error
@@ -24,7 +24,7 @@ func NewMetricService(repo MetricRepo) *MetricService {
 }
 
 func (s *MetricService) GetMetrics() []string {
-	metrics := s.repo.GetAll()
+	metrics := s.repo.GetAllSlice()
 	var out []string
 	for _, v := range metrics {
 		switch v.MType {
