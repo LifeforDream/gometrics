@@ -18,14 +18,14 @@ func TestParseOptions(t *testing.T) {
 			args: []string{
 				"-a", "localhost:8085",
 				"-l", "debug",
-				"-i", "350s",
+				"-i", "350",
 				"-f", "m.json",
 				"-r", "f",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
 				"LOG_LEVEL":         "warn",
-				"STORE_INTERVAL":    "150s",
+				"STORE_INTERVAL":    "150",
 				"FILE_STORAGE_PATH": "file.txt",
 				"RESTORE":           "t",
 			},
