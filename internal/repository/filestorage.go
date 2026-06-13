@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/LifeforDream/gometrics/internal/middlewares/logger"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"go.uber.org/zap"
 )
@@ -76,11 +75,20 @@ func (f *FileBackedStorage) loadMetrics() error {
 }
 
 func (metrics *metriclist) save(fname string) error {
+	tfile, err := os.CreateTemp("", "")
+	if err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(metrics, "", "   ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(fname, data, 0666)
+
+	err = os.WriteFile(tfile.Name(), data, 0666)
+	if err != nil {
+		return err
+	}
+	return os.Rename(tfile.Name(), fname)
 }
 
 func (metrics *metriclist) load(fname string) error {
@@ -93,7 +101,7 @@ func (metrics *metriclist) load(fname string) error {
 	dec := json.NewDecoder(file)
 	err = dec.Decode(metrics)
 	if errors.Is(err, io.EOF) {
-		// fresh start file empty
+		// fresh start, file is empty
 		return nil
 	}
 	return err
@@ -105,7 +113,7 @@ func SaveMetrics(fname string, metrics map[string]models.Metrics) error {
 	return err
 }
 
-func SaveMetricsJob(ctx context.Context, interval int, s saver) {
+func SaveMetricsJob(ctx context.Context, interval int, s saver, logger *zap.Logger) {
 	if interval <= 0 {
 		return
 	}
@@ -117,7 +125,7 @@ func SaveMetricsJob(ctx context.Context, interval int, s saver) {
 		case <-ticker.C:
 			err := s.Save()
 			if err != nil {
-				logger.Log.Error("Error while saving metrics", zap.Error(err))
+				logger.Error("Error while saving metrics", zap.Error(err))
 			}
 		case <-ctx.Done():
 			return

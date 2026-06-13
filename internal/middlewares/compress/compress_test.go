@@ -10,9 +10,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestCompress(t *testing.T) {
+	logger := zap.NewNop()
 	requestBody := `{"request": "please"}`
 	responseBody := `{"status": "ok"}`
 	client := &http.Client{
@@ -22,7 +24,7 @@ func TestCompress(t *testing.T) {
 	}
 	bodyChan := make(chan string, 1)
 
-	handler := Compress(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Compress(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		bodyChan <- string(body)

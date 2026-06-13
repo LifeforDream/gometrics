@@ -10,12 +10,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/LifeforDream/gometrics/internal/middlewares/logger"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"go.uber.org/zap"
 )
 
-func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string) {
+func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string, logger *zap.Logger) {
 	client := &http.Client{}
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
@@ -28,7 +27,7 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 				for name, metric := range metrics {
 					err := sendMetric(metric.Type, name, serverAddress, metric.Value, client)
 					if err != nil {
-						logger.Log.Error("Error sending metric", zap.String("metricName", name), zap.Error(err))
+						logger.Error("Error sending metric", zap.String("metricName", name), zap.Error(err))
 					}
 				}
 			case <-ctx.Done():
@@ -46,19 +45,19 @@ func compress(b *bytes.Buffer) error {
 	b.Reset()
 
 	if err != nil {
-		return fmt.Errorf("failed to read from uncompressed data: %v", err)
+		return fmt.Errorf("failed to read from uncompressed data: %w", err)
 	}
 	w, err := gzip.NewWriterLevel(b, gzip.BestCompression)
 	if err != nil {
-		return fmt.Errorf("failed init compress writer: %v", err)
+		return fmt.Errorf("failed init compress writer: %w", err)
 	}
 	_, err = w.Write(od)
 	if err != nil {
-		return fmt.Errorf("failed write data to compress temporary buffer: %v", err)
+		return fmt.Errorf("failed write data to compress temporary buffer: %W", err)
 	}
 	err = w.Close()
 	if err != nil {
-		return fmt.Errorf("failed compress data: %v", err)
+		return fmt.Errorf("failed compress data: %W", err)
 	}
 	return nil
 }
@@ -88,7 +87,6 @@ func sendMetric(metricType, metricName, serverAddress string, metricValue float6
 	// convert to json
 	enc := json.NewEncoder(&buf)
 	if err := enc.Encode(req); err != nil {
-		logger.Log.Debug("error encoding response", zap.Error(err))
 		return err
 	}
 

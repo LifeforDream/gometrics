@@ -5,12 +5,10 @@ import (
 
 	models "github.com/LifeforDream/gometrics/internal/model"
 	repository "github.com/LifeforDream/gometrics/internal/repository"
+	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var floatPtr = func(f float64) *float64 { return &f }
-var intPtr = func(i int64) *int64 { return &i }
 
 func TestGetMetrics(t *testing.T) {
 	tests := []struct {
@@ -24,8 +22,8 @@ func TestGetMetrics(t *testing.T) {
 			name: "get gauge and a counter",
 			repo: repository.NewMemStorage(),
 			input: []models.Metrics{
-				{MType: "counter", ID: "pollcount", Delta: intPtr(2)},
-				{MType: "gauge", ID: "alloc", Value: floatPtr(1.25)},
+				{MType: "counter", ID: "pollcount", Delta: utils.IntPtr(t, 2)},
+				{MType: "gauge", ID: "alloc", Value: utils.FloatPtr(t, 1.25)},
 			},
 			want: []string{
 				"pollcount 2",
@@ -72,7 +70,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "get valid counter",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -85,7 +83,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "get valid gauge",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "alloc", MType: "gauge", Value: floatPtr(1.25)},
+				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)},
 			},
 			input: input{
 				name:       "alloc",
@@ -107,7 +105,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "incorrect metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -119,7 +117,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "invalid metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -261,20 +259,20 @@ func TestGetMetric(t *testing.T) {
 			name: "get valid counter",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
 			},
 			input:   input{"pollcount", "counter"},
-			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
+			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
 			wantErr: false,
 		},
 		{
 			name: "get valid gauge",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "alloc", MType: "gauge", Value: floatPtr(1.25)},
+				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)},
 			},
 			input:   input{"alloc", "gauge"},
-			want:    models.Metrics{ID: "alloc", MType: "gauge", Value: floatPtr(1.25)},
+			want:    models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)},
 			wantErr: false,
 		},
 		{
@@ -287,7 +285,7 @@ func TestGetMetric(t *testing.T) {
 			name: "incorrect metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: intPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
 			},
 			input:   input{"pollcount", "gauge"},
 			wantErr: true,

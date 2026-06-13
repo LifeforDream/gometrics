@@ -9,12 +9,10 @@ import (
 	"testing"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
+	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var floatPtr = func(f float64) *float64 { return &f }
-var intPtr = func(i int64) *int64 { return &i }
 
 func TestSendMetric(t *testing.T) {
 	tests := []struct {
@@ -31,7 +29,7 @@ func TestSendMetric(t *testing.T) {
 			metricType:  "counter",
 			metricName:  "pollCount",
 			metricValue: 5,
-			wantMetric:  models.Metrics{ID: "pollCount", MType: "counter", Delta: intPtr(5)},
+			wantMetric:  models.Metrics{ID: "pollCount", MType: "counter", Delta: utils.IntPtr(t, 5)},
 			wantErr:     false,
 		},
 		{
@@ -39,7 +37,7 @@ func TestSendMetric(t *testing.T) {
 			metricType:  "gauge",
 			metricName:  "Alloc",
 			metricValue: 23.5,
-			wantMetric:  models.Metrics{ID: "Alloc", MType: "gauge", Value: floatPtr(23.5)},
+			wantMetric:  models.Metrics{ID: "Alloc", MType: "gauge", Value: utils.FloatPtr(t, 23.5)},
 			wantErr:     false,
 		},
 		{

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/LifeforDream/gometrics/internal/middlewares/logger"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -34,10 +33,11 @@ type MetricService interface {
 
 type Handler struct {
 	service MetricService
+	logger  *zap.Logger
 }
 
-func NewHandler(service *service.MetricService) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *service.MetricService, logger *zap.Logger) *Handler {
+	return &Handler{service: service, logger: logger}
 }
 
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +65,7 @@ func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(err, &invalidTypeErr) {
-			logger.Log.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -115,10 +115,11 @@ func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			logger.Log.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		h.logger.Error("Unexpected error while updating metrics value", zap.Error(servErr))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -127,26 +128,26 @@ func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-		logger.Log.Debug("Invalid content-type", zap.String("content-type", ct))
+		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	var req models.Metrics
 
-	logger.Log.Debug("decoding request")
+	h.logger.Debug("decoding request")
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
-		logger.Log.Debug("cannot decode request JSON body", zap.Error(err))
+		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if req.ID == "" {
-		logger.Log.Debug("Metric name is empty, cannot retrieve")
+		h.logger.Debug("Metric name is empty, cannot retrieve")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	if req.MType == "" {
-		logger.Log.Debug("Metric type is empty, cannot retrieve")
+		h.logger.Debug("Metric type is empty, cannot retrieve")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -156,7 +157,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(err, &invalidTypeErr) {
-			logger.Log.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -169,15 +170,15 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(metric); err != nil {
-		logger.Log.Debug("error encoding response", zap.Error(err))
+		h.logger.Debug("error encoding response", zap.Error(err))
 		return
 	}
-	logger.Log.Debug("sending HTTP 200 response")
+	h.logger.Debug("sending HTTP 200 response")
 }
 
 func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-		logger.Log.Debug("Invalid content-type", zap.String("content-type", ct))
+		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -185,10 +186,10 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	var servErr error
 	var req models.Metrics
 
-	logger.Log.Debug("decoding request")
+	h.logger.Debug("decoding request")
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
-		logger.Log.Debug("cannot decode request JSON body", zap.Error(err))
+		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -196,20 +197,20 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	switch req.MType {
 	case models.Counter:
 		if req.Delta == nil {
-			logger.Log.Debug("Empty Delta field for Counter")
+			h.logger.Debug("Empty Delta field for Counter")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		servErr = h.service.UpdateCounter(req)
 	case models.Gauge:
 		if req.Value == nil {
-			logger.Log.Debug("Empty Value field for Gauge")
+			h.logger.Debug("Empty Value field for Gauge")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		servErr = h.service.UpdateGauge(req)
 	default:
-		logger.Log.Debug("Unexpected metric type", zap.String("type", req.MType))
+		h.logger.Debug("Unexpected metric type", zap.String("type", req.MType))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -217,13 +218,14 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			logger.Log.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		h.logger.Error("Unexpected error while updating metric", zap.Error(servErr))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	logger.Log.Debug("sending HTTP 200 response")
+	h.logger.Debug("sending HTTP 200 response")
 }

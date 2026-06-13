@@ -1,4 +1,4 @@
-package logger
+package logs
 
 import (
 	"net/http"
@@ -45,11 +45,9 @@ func TestWithLogging(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// arrange: replace global logger with an observer
 			core, logs := observer.New(zapcore.DebugLevel)
-			original := Log
-			Log = zap.New(core)
-			t.Cleanup(func() { Log = original })
+			logger := zap.New(core)
 
-			ts := httptest.NewServer(WithLogging(tt.handler))
+			ts := httptest.NewServer(WithLogging(logger)(tt.handler))
 			defer ts.Close()
 
 			req, err := http.NewRequest(tt.method, ts.URL+tt.path, nil)

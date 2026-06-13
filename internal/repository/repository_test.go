@@ -6,12 +6,10 @@ import (
 	"testing"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
+	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var floatPtr = func(f float64) *float64 { return &f }
-var intPtr = func(i int64) *int64 { return &i }
 
 func TestSaveLoadMetrics(t *testing.T) {
 	tests := []struct {
@@ -21,8 +19,8 @@ func TestSaveLoadMetrics(t *testing.T) {
 		{
 			name: "gauge and counter round-trip",
 			metrics: map[string]models.Metrics{
-				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: floatPtr(1.25)},
-				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: intPtr(42)},
+				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.25)},
+				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(t, 42)},
 			},
 		},
 		{
@@ -88,12 +86,12 @@ func TestNewFileStorage(t *testing.T) {
 			name:    "restore=true loads existing file",
 			restore: true,
 			preloadMetrics: map[string]models.Metrics{
-				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: intPtr(5)},
-				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: floatPtr(2.5)},
+				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(t, 5)},
+				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 2.5)},
 			},
 			wantMetrics: map[string]models.Metrics{
-				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: intPtr(5)},
-				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: floatPtr(2.5)},
+				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(t, 5)},
+				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 2.5)},
 			},
 		},
 		{

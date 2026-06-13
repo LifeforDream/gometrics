@@ -3,24 +3,28 @@ package compress
 import (
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
-func Compress(next http.Handler) http.Handler {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		cw := newCompressWriter(w, strings.Contains(r.Header.Get("Accept-Encoding"), "gzip"))
-		defer cw.Close()
+func Compress(log *zap.Logger) func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cw := newCompressWriter(w, strings.Contains(r.Header.Get("Accept-Encoding"), "gzip"))
+			defer cw.Close()
 
-		if r.Header.Get("Content-Encoding") == "gzip" {
-			cr, err := newCompressReader(r.Body)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+			if r.Header.Get("Content-Encoding") == "gzip" {
+				cr, err := newCompressReader(r.Body)
+				if err != nil {
+					log.Error("Error while decompressing body", zap.Error(err))
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				r.Body = cr
+				defer cr.Close()
 			}
-			r.Body = cr
-			defer cr.Close()
-		}
 
-		next.ServeHTTP(cw, r)
+			h.ServeHTTP(cw, r)
+		})
 	}
-	return http.HandlerFunc(fn)
 }
