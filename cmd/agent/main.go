@@ -2,20 +2,30 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 
 	agent "github.com/LifeforDream/gometrics/internal/agent"
+	"github.com/LifeforDream/gometrics/internal/logging"
 )
 
 func main() {
-	parseFlags()
+	agentOptions, err := parseOptions()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	serverAddr := constructAddress()
+	serverAddr := constructAddress(agentOptions)
+
+	logger, err := logging.Initialize("info")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	cfg := agent.Config{
-		PollInterval:   agentOptions.pollInterval,
-		ReportInterval: agentOptions.reportInterval,
+		PollInterval:   agentOptions.PollInterval,
+		ReportInterval: agentOptions.ReportInterval,
 		ServerAddr:     serverAddr,
 	}
 	a := agent.New(cfg)
@@ -23,7 +33,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	a.Run(ctx)
+	a.Run(ctx, logger)
 
 	<-ctx.Done()
 }

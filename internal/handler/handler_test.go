@@ -1,18 +1,23 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
+	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
+	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func testRequest(t *testing.T, ts *httptest.Server, method, path string) (*http.Response, string) {
@@ -30,6 +35,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path string) (*http.
 }
 
 func TestGetMetrics(t *testing.T) {
+	logger := zap.NewNop()
 	type metric struct {
 		mtype string
 		name  string
@@ -37,20 +43,20 @@ func TestGetMetrics(t *testing.T) {
 	}
 	tests := []struct {
 		name  string
-		input []metric //metrics to plant beforehand
-		want  []metric //metrics to check
+		input []models.Metrics //metrics to plant beforehand
+		want  []metric         //metrics to check
 	}{
 		{
 			name: "no metrics",
 		},
 		{
 			name:  "a counter",
-			input: []metric{{"counter", "pollcount", float64(1)}},
+			input: []models.Metrics{{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 1)}},
 			want:  []metric{{"counter", "pollcount", float64(1)}},
 		},
 		{
 			name:  "a gauge",
-			input: []metric{{"gauge", "alloc", 1.25}},
+			input: []models.Metrics{{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)}},
 			want:  []metric{{"gauge", "alloc", 1.25}},
 		},
 	}
@@ -61,17 +67,17 @@ func TestGetMetrics(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 
-			h := NewHandler(service)
+			h := NewHandler(service, logger)
 			r.Get("/", h.GetMetrics)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
 
 			for _, metric := range tt.input {
-				switch metric.mtype {
+				switch metric.MType {
 				case "counter":
-					service.UpdateCounter(metric.name, int64(metric.val))
+					service.UpdateCounter(metric)
 				case "gauge":
-					service.UpdateGauge(metric.name, metric.val)
+					service.UpdateGauge(metric)
 				}
 			}
 			resp, get := testRequest(t, ts, http.MethodGet, "/")
@@ -85,6 +91,7 @@ func TestGetMetrics(t *testing.T) {
 }
 
 func TestGetMetric(t *testing.T) {
+	logger := zap.NewNop()
 	type want struct {
 		statusCode int
 		value      string
@@ -131,11 +138,11 @@ func TestGetMetric(t *testing.T) {
 			// arrange
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
-			service.UpdateCounter("pollcount", 2)
-			service.UpdateGauge("alloc", 1.25)
+			service.UpdateCounterByName("pollcount", 2)
+			service.UpdateGaugeByName("alloc", 1.25)
 
-			h := NewHandler(service)
-			r.Get("/value/{type}/{name}", h.GetMetric)
+			h := NewHandler(service, logger)
+			r.Get("/value/{type}/{name}", h.GetMetricValue)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -150,6 +157,7 @@ func TestGetMetric(t *testing.T) {
 }
 
 func TestUpdateMetric(t *testing.T) {
+	logger := zap.NewNop()
 	type want struct {
 		statusCode int
 	}
@@ -247,8 +255,8 @@ func TestUpdateMetric(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 
-			h := NewHandler(service)
-			r.Post("/update/{type}/{name}/{value}", h.UpdateMetric)
+			h := NewHandler(service, logger)
+			r.Post("/update/{type}/{name}/{value}", h.UpdateMetricValue)
 
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -260,6 +268,214 @@ func TestUpdateMetric(t *testing.T) {
 
 			path := fmt.Sprintf("/update/%s/%s/%s", tt.input.metricType, tt.input.metricName, tt.input.metricValue)
 			resp, _ := testRequest(t, ts, tt.input.method, path)
+			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
+		})
+	}
+}
+
+func testRequestJSON(t *testing.T, ts *httptest.Server, method, path, contentType, rawBody string) (*http.Response, string) {
+	req, err := http.NewRequest(method, ts.URL+path, strings.NewReader(rawBody))
+	require.NoError(t, err)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := ts.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp, string(respBody)
+}
+
+func TestGetMetricJson(t *testing.T) {
+	logger := zap.NewNop()
+	type want struct {
+		statusCode int
+		metric     models.Metrics
+	}
+	tests := []struct {
+		name        string
+		contentType string
+		rawBody     string
+		want        want
+	}{
+		{
+			name:        "valid counter request",
+			contentType: "application/json",
+			rawBody:     `{"id":"pollcount","type":"counter"}`,
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)}},
+		},
+		{
+			name:        "valid gauge request",
+			contentType: "application/json",
+			rawBody:     `{"id":"alloc","type":"gauge"}`,
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)}},
+		},
+		{
+			name:        "wrong content type",
+			contentType: "text/plain",
+			rawBody:     `{"id":"pollcount","type":"counter"}`,
+			want:        want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name:        "no content type",
+			contentType: "",
+			rawBody:     `{"id":"pollcount","type":"counter"}`,
+			want:        want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name:        "malformed json",
+			contentType: "application/json",
+			rawBody:     `not-json`,
+			want:        want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name:        "empty id",
+			contentType: "application/json",
+			rawBody:     `{"id":"","type":"counter"}`,
+			want:        want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name:        "empty type",
+			contentType: "application/json",
+			rawBody:     `{"id":"pollcount","type":""}`,
+			want:        want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name:        "metric not found",
+			contentType: "application/json",
+			rawBody:     `{"id":"unknown","type":"counter"}`,
+			want:        want{statusCode: http.StatusNotFound},
+		},
+		{
+			name:        "wrong metric type for existing metric",
+			contentType: "application/json",
+			rawBody:     `{"id":"alloc","type":"counter"}`,
+			want:        want{statusCode: http.StatusBadRequest},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := chi.NewRouter()
+			service := service.NewMetricService(repository.NewMemStorage())
+			service.UpdateCounter(models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)})
+			service.UpdateGauge(models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)})
+
+			h := NewHandler(service, logger)
+			r.Post("/value", h.GetMetric)
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
+			resp, body := testRequestJSON(t, ts, http.MethodPost, "/value", tt.contentType, tt.rawBody)
+			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
+			if tt.want.statusCode == http.StatusOK {
+				var got models.Metrics
+				require.NoError(t, json.NewDecoder(strings.NewReader(body)).Decode(&got))
+				assert.Equal(t, tt.want.metric, got)
+			}
+		})
+	}
+}
+
+func TestUpdateMetricJson(t *testing.T) {
+	logger := zap.NewNop()
+	type inputParams struct {
+		contentType string
+		rawBody     string
+	}
+	type want struct {
+		statusCode int
+	}
+	tests := []struct {
+		name  string
+		setUp []inputParams
+		input inputParams
+		want  want
+	}{
+		{
+			name: "valid gauge update",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `{"id":"alloc","type":"gauge","value":23.5}`,
+			},
+			want: want{statusCode: http.StatusOK},
+		},
+		{
+			name: "valid counter update",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `{"id":"pollcount","type":"counter","delta":5}`,
+			},
+			want: want{statusCode: http.StatusOK},
+		},
+		{
+			name: "wrong content type",
+			input: inputParams{
+				contentType: "text/plain",
+				rawBody:     `{"id":"alloc","type":"gauge","value":23.5}`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "malformed json",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `not-json`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "counter without delta",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `{"id":"pollcount","type":"counter"}`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "gauge without value",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `{"id":"alloc","type":"gauge"}`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "invalid metric type",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `{"id":"something","type":"invalid","value":1.0}`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "type conflict: counter update on existing gauge",
+			setUp: []inputParams{
+				{contentType: "application/json", rawBody: `{"id":"alloc","type":"gauge","value":23.5}`},
+			},
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `{"id":"alloc","type":"counter","delta":1}`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := chi.NewRouter()
+			service := service.NewMetricService(repository.NewMemStorage())
+			h := NewHandler(service, logger)
+			r.Post("/update", h.UpdateMetric)
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
+			for _, s := range tt.setUp {
+				testRequestJSON(t, ts, http.MethodPost, "/update", s.contentType, s.rawBody)
+			}
+
+			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/update", tt.input.contentType, tt.input.rawBody)
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 		})
 	}

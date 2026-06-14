@@ -18,10 +18,22 @@ func NewMemStorage() *MemStorage {
 	return &MemStorage{store: make(map[string]models.Metrics)}
 }
 
-func (m *MemStorage) GetAll() []models.Metrics {
+func (m *MemStorage) GetAllSlice() []models.Metrics {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return slices.Collect(maps.Values(m.store))
+}
+
+func (m *MemStorage) GetAll() map[string]models.Metrics {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return maps.Clone(m.store)
+}
+
+func (m *MemStorage) SetAll(data map[string]models.Metrics) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store = data
 }
 
 func (m *MemStorage) GetMetric(name string) (models.Metrics, bool) {
@@ -66,13 +78,10 @@ func (m *MemStorage) UpdateCounter(metric models.Metrics) error {
 				MetricName:   metric.ID,
 			}
 		}
-		startVal = int64(*exist.Value)
+		startVal = *exist.Delta
 	}
-	newVal := float64(startVal + *metric.Delta)
-	// we could clean the Delta here
-	// but seems to be no reason right now
-	metric.Value = &newVal
-	metric.Delta = nil
+	newVal := startVal + *metric.Delta
+	metric.Delta = &newVal
 	m.store[metric.ID] = metric
 	return nil
 }

@@ -1,16 +1,18 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	models "github.com/LifeforDream/gometrics/internal/model"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 const pageHtml = `<html>
@@ -23,17 +25,19 @@ const pageHtml = `<html>
 
 type MetricService interface {
 	GetMetrics() []string
-	GetMetric(metricType string, name string) (string, error)
-	UpdateGauge(name string, value float64) error
-	UpdateCounter(name string, value int64) error
+	GetMetricValue(metricType string, name string) (string, error)
+	GetMetric(metricType string, name string) (models.Metrics, error)
+	UpdateGauge(models.Metrics) error
+	UpdateCounter(models.Metrics) error
 }
 
 type Handler struct {
 	service MetricService
+	logger  *zap.Logger
 }
 
-func NewHandler(service *service.MetricService) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *service.MetricService, logger *zap.Logger) *Handler {
+	return &Handler{service: service, logger: logger}
 }
 
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
@@ -53,15 +57,15 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(page))
 }
 
-func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	metricType := strings.ToLower(chi.URLParam(r, "type"))
 	metricName := strings.ToLower(chi.URLParam(r, "name"))
 
-	value, err := h.service.GetMetric(metricType, metricName)
+	value, err := h.service.GetMetricValue(metricType, metricName)
 	if err != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(err, &invalidTypeErr) {
-			log.Printf("Invalid metric type: %s", invalidTypeErr.NewType)
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
@@ -72,7 +76,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(value))
 }
 
-func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 	var servErr error
 
 	metricType := strings.ToLower(chi.URLParam(r, "type"))
@@ -86,14 +90,24 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		servErr = h.service.UpdateGauge(metricName, floatVal)
+		metric := models.Metrics{
+			ID:    metricName,
+			MType: models.Gauge,
+			Value: &floatVal,
+		}
+		servErr = h.service.UpdateGauge(metric)
 	case "counter":
 		intVal, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		servErr = h.service.UpdateCounter(metricName, intVal)
+		metric := models.Metrics{
+			ID:    metricName,
+			MType: models.Counter,
+			Delta: &intVal,
+		}
+		servErr = h.service.UpdateCounter(metric)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -101,12 +115,117 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			log.Printf("Invalid metric type: %s", invalidTypeErr.NewType)
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		h.logger.Error("Unexpected error while updating metrics value", zap.Error(servErr))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
+	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var req models.Metrics
+
+	h.logger.Debug("decoding request")
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.ID == "" {
+		h.logger.Debug("Metric name is empty, cannot retrieve")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.MType == "" {
+		h.logger.Debug("Metric type is empty, cannot retrieve")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	metric, err := h.service.GetMetric(req.MType, req.ID)
+
+	if err != nil {
+		var invalidTypeErr myErrors.InvalidMetricType
+		if errors.As(err, &invalidTypeErr) {
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(metric); err != nil {
+		h.logger.Debug("error encoding response", zap.Error(err))
+		return
+	}
+	h.logger.Debug("sending HTTP 200 response")
+}
+
+func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
+	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var servErr error
+	var req models.Metrics
+
+	h.logger.Debug("decoding request")
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	switch req.MType {
+	case models.Counter:
+		if req.Delta == nil {
+			h.logger.Debug("Empty Delta field for Counter")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		servErr = h.service.UpdateCounter(req)
+	case models.Gauge:
+		if req.Value == nil {
+			h.logger.Debug("Empty Value field for Gauge")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		servErr = h.service.UpdateGauge(req)
+	default:
+		h.logger.Debug("Unexpected metric type", zap.String("type", req.MType))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if servErr != nil {
+		var invalidTypeErr myErrors.InvalidMetricType
+		if errors.As(servErr, &invalidTypeErr) {
+			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("Unexpected error while updating metric", zap.Error(servErr))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	h.logger.Debug("sending HTTP 200 response")
 }

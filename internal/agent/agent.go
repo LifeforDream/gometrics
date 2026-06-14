@@ -1,6 +1,10 @@
 package agent
 
-import "context"
+import (
+	"context"
+
+	"go.uber.org/zap"
+)
 
 type AgentMetric struct {
 	Type  string
@@ -21,8 +25,8 @@ func New(cfg Config) *Agent {
 	return &Agent{cfg: cfg}
 }
 
-func (a *Agent) Run(ctx context.Context) {
+func (a *Agent) Run(ctx context.Context, logger *zap.Logger) {
 	c := make(chan map[string]AgentMetric, 1)
 	go collect(ctx, a.cfg.PollInterval, c)
-	go send(ctx, a.cfg.ReportInterval, c, a.cfg.ServerAddr)
+	go send(ctx, a.cfg.ReportInterval, c, a.cfg.ServerAddr, logger)
 }
