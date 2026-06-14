@@ -21,7 +21,7 @@ type FileBackedStorage struct {
 }
 
 type saver interface {
-	Save() error
+	save() error
 }
 
 func NewFileStorage(fname string, interval int, restore bool) (*FileBackedStorage, error) {
@@ -45,7 +45,7 @@ func (f *FileBackedStorage) SetGauge(m models.Metrics) error {
 		return err
 	}
 	if f.syncSave {
-		return f.Save()
+		return f.save()
 	}
 	return nil
 }
@@ -55,13 +55,17 @@ func (f *FileBackedStorage) UpdateCounter(metric models.Metrics) error {
 		return err
 	}
 	if f.syncSave {
-		return f.Save()
+		return f.save()
 	}
 	return nil
 }
 
-func (f *FileBackedStorage) Save() error {
+func (f *FileBackedStorage) save() error {
 	return SaveMetrics(f.fname, f.MemStorage.GetAll())
+}
+
+func (f *FileBackedStorage) Close() error {
+	return f.save()
 }
 
 func (f *FileBackedStorage) loadMetrics() error {
@@ -123,7 +127,7 @@ func SaveMetricsJob(ctx context.Context, interval int, s saver, logger *zap.Logg
 	for {
 		select {
 		case <-ticker.C:
-			err := s.Save()
+			err := s.save()
 			if err != nil {
 				logger.Error("Error while saving metrics", zap.Error(err))
 			}
