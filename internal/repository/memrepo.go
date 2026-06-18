@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"maps"
 	"slices"
 	"sync"
@@ -18,10 +19,14 @@ func NewMemStorage() *MemStorage {
 	return &MemStorage{store: make(map[string]models.Metrics)}
 }
 
-func (m *MemStorage) GetAllSlice() []models.Metrics {
+func (m *MemStorage) Ping(ctx context.Context) error {
+	return nil
+}
+
+func (m *MemStorage) GetAllSlice(ctx context.Context) ([]models.Metrics, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return slices.Collect(maps.Values(m.store))
+	return slices.Collect(maps.Values(m.store)), nil
 }
 
 func (m *MemStorage) GetAll() map[string]models.Metrics {
@@ -36,14 +41,17 @@ func (m *MemStorage) SetAll(data map[string]models.Metrics) {
 	m.store = data
 }
 
-func (m *MemStorage) GetMetric(name string) (models.Metrics, bool) {
+func (m *MemStorage) GetMetric(ctx context.Context, name string) (models.Metrics, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	metric, ok := m.store[name]
-	return metric, ok
+	if !ok {
+		return models.Metrics{}, myErrors.MetricNotFound
+	}
+	return metric, nil
 }
 
-func (m *MemStorage) SetGauge(metric models.Metrics) error {
+func (m *MemStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -62,7 +70,7 @@ func (m *MemStorage) SetGauge(metric models.Metrics) error {
 	return nil
 }
 
-func (m *MemStorage) UpdateCounter(metric models.Metrics) error {
+func (m *MemStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -83,5 +91,9 @@ func (m *MemStorage) UpdateCounter(metric models.Metrics) error {
 	newVal := startVal + *metric.Delta
 	metric.Delta = &newVal
 	m.store[metric.ID] = metric
+	return nil
+}
+
+func (m *MemStorage) Close() error {
 	return nil
 }

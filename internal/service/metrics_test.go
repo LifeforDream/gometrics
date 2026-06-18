@@ -40,12 +40,13 @@ func TestGetMetrics(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.input {
 				if metric.MType == "counter" {
-					tt.repo.UpdateCounter(metric)
+					tt.repo.UpdateCounter(t.Context(), metric)
 				} else {
-					tt.repo.SetGauge(metric)
+					tt.repo.SetGauge(t.Context(), metric)
 				}
 			}
-			got := s.GetMetrics()
+			got, err := s.GetMetrics(t.Context())
+			require.NoError(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
@@ -131,13 +132,13 @@ func TestGetMetricValue(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.setUp {
 				if metric.MType == "counter" {
-					tt.repo.UpdateCounter(metric)
+					tt.repo.UpdateCounter(t.Context(), metric)
 				} else {
-					tt.repo.SetGauge(metric)
+					tt.repo.SetGauge(t.Context(), metric)
 				}
 			}
 
-			got, gotErr := s.GetMetricValue(tt.input.metricType, tt.input.name)
+			got, gotErr := s.GetMetricValue(t.Context(), tt.input.metricType, tt.input.name)
 			if tt.wantErr {
 				require.Error(t, gotErr, "Unexpected success on err %s", gotErr)
 			} else {
@@ -175,10 +176,10 @@ func TestUpdateGauge(t *testing.T) {
 			repo := repository.NewMemStorage()
 			s := NewMetricService(repo)
 			for _, val := range tt.values {
-				s.UpdateGaugeByName(tt.mname, val)
+				s.UpdateGaugeByName(t.Context(), tt.mname, val)
 			}
-			metric, ok := repo.GetMetric(tt.mname)
-			require.True(t, ok, "metric not found in repository")
+			metric, err := repo.GetMetric(t.Context(), tt.mname)
+			require.NoError(t, err, "metric not found in repository")
 			require.Equal(t, tt.wantVal, *metric.Value, "unexpected metric value")
 			require.Equal(t, "gauge", metric.MType, "unexpected metric type")
 		})
@@ -211,10 +212,10 @@ func TestUpdateCounter(t *testing.T) {
 			repo := repository.NewMemStorage()
 			s := NewMetricService(repo)
 			for _, val := range tt.values {
-				s.UpdateCounterByName(tt.mname, val)
+				s.UpdateCounterByName(t.Context(), tt.mname, val)
 			}
-			metric, ok := repo.GetMetric(tt.mname)
-			require.True(t, ok, "metric not found in repository")
+			metric, err := repo.GetMetric(t.Context(), tt.mname)
+			require.NoError(t, err, "metric not found in repository")
 			require.Equal(t, tt.wantVal, *metric.Delta, "unexpected metric value")
 			require.Equal(t, "counter", metric.MType, "unexpected metric type")
 		})
@@ -226,19 +227,19 @@ func TestMetricConflicts(t *testing.T) {
 	s := NewMetricService(repo)
 
 	// Create a gauge metric
-	err := s.UpdateGaugeByName("Alloc", 23.5)
+	err := s.UpdateGaugeByName(t.Context(), "Alloc", 23.5)
 	assert.NoError(t, err, "failed to create gauge metric: %v", err)
 
 	// Attempt to update the same metric as a counter
-	err = s.UpdateCounterByName("Alloc", 1)
+	err = s.UpdateCounterByName(t.Context(), "Alloc", 1)
 	assert.Error(t, err, "expected error when updating gauge as counter")
 
 	// Create a counter metric
-	err = s.UpdateCounterByName("PollCount", 1)
+	err = s.UpdateCounterByName(t.Context(), "PollCount", 1)
 	assert.NoError(t, err, "failed to create counter metric: %v", err)
 
 	// Attempt to update the same metric as a gauge
-	err = s.UpdateGaugeByName("PollCount", 23.5)
+	err = s.UpdateGaugeByName(t.Context(), "PollCount", 23.5)
 	assert.Error(t, err, "expected error when updating counter as gauge")
 }
 
@@ -296,12 +297,12 @@ func TestGetMetric(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.setUp {
 				if metric.MType == "counter" {
-					tt.repo.UpdateCounter(metric)
+					tt.repo.UpdateCounter(t.Context(), metric)
 				} else {
-					tt.repo.SetGauge(metric)
+					tt.repo.SetGauge(t.Context(), metric)
 				}
 			}
-			got, gotErr := s.GetMetric(tt.input.metricType, tt.input.name)
+			got, gotErr := s.GetMetric(t.Context(), tt.input.metricType, tt.input.name)
 			if tt.wantErr {
 				require.Error(t, gotErr)
 			} else {

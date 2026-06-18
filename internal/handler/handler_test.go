@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,7 +71,7 @@ func TestGetMetrics(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 
-			h := NewHandler(service, logger, nil)
+			h := NewHandler(service, logger)
 			r.Get("/", h.GetMetrics)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -78,9 +79,9 @@ func TestGetMetrics(t *testing.T) {
 			for _, metric := range tt.input {
 				switch metric.MType {
 				case "counter":
-					service.UpdateCounter(metric)
+					service.UpdateCounter(t.Context(), metric)
 				case "gauge":
-					service.UpdateGauge(metric)
+					service.UpdateGauge(t.Context(), metric)
 				}
 			}
 			resp, get := testRequest(t, ts, http.MethodGet, "/")
@@ -141,10 +142,10 @@ func TestGetMetric(t *testing.T) {
 			// arrange
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
-			service.UpdateCounterByName("pollcount", 2)
-			service.UpdateGaugeByName("alloc", 1.25)
+			service.UpdateCounterByName(t.Context(), "pollcount", 2)
+			service.UpdateGaugeByName(t.Context(), "alloc", 1.25)
 
-			h := NewHandler(service, logger, nil)
+			h := NewHandler(service, logger)
 			r.Get("/value/{type}/{name}", h.GetMetricValue)
 
 			ts := httptest.NewServer(r)
@@ -258,7 +259,7 @@ func TestUpdateMetric(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 
-			h := NewHandler(service, logger, nil)
+			h := NewHandler(service, logger)
 			r.Post("/update/{type}/{name}/{value}", h.UpdateMetricValue)
 
 			ts := httptest.NewServer(r)
@@ -290,82 +291,109 @@ func testRequestJSON(t *testing.T, ts *httptest.Server, method, path, contentTyp
 	return resp, string(respBody)
 }
 
+type stubService struct {
+	*service.MetricService
+	wantErr error
+}
+
+func (s *stubService) GetMetric(ctx context.Context, metricType, name string) (models.Metrics, error) {
+	return models.Metrics{}, s.wantErr
+}
+
 func TestGetMetricJson(t *testing.T) {
 	logger := zap.NewNop()
+	defaultservice := service.NewMetricService(repository.NewMemStorage())
+	defaultservice.UpdateCounter(t.Context(), models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)})
+	defaultservice.UpdateGauge(t.Context(), models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)})
+
 	type want struct {
 		statusCode int
 		metric     models.Metrics
 	}
 	tests := []struct {
 		name        string
+		svc         MetricService
 		contentType string
 		rawBody     string
 		want        want
 	}{
 		{
 			name:        "valid counter request",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"pollcount","type":"counter"}`,
 			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)}},
 		},
 		{
 			name:        "valid gauge request",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"alloc","type":"gauge"}`,
 			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)}},
 		},
 		{
 			name:        "wrong content type",
+			svc:         defaultservice,
 			contentType: "text/plain",
 			rawBody:     `{"id":"pollcount","type":"counter"}`,
 			want:        want{statusCode: http.StatusBadRequest},
 		},
 		{
 			name:        "no content type",
+			svc:         defaultservice,
 			contentType: "",
 			rawBody:     `{"id":"pollcount","type":"counter"}`,
 			want:        want{statusCode: http.StatusBadRequest},
 		},
 		{
 			name:        "malformed json",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `not-json`,
 			want:        want{statusCode: http.StatusBadRequest},
 		},
 		{
 			name:        "empty id",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"","type":"counter"}`,
 			want:        want{statusCode: http.StatusBadRequest},
 		},
 		{
 			name:        "empty type",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"pollcount","type":""}`,
 			want:        want{statusCode: http.StatusBadRequest},
 		},
 		{
 			name:        "metric not found",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"unknown","type":"counter"}`,
 			want:        want{statusCode: http.StatusNotFound},
 		},
 		{
 			name:        "wrong metric type for existing metric",
+			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"alloc","type":"counter"}`,
 			want:        want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name:        "500 error on infra problems",
+			svc:         &stubService{wantErr: errors.New("some db error")},
+			contentType: "application/json",
+			rawBody:     `{"id":"alloc","type":"counter"}`,
+			want:        want{statusCode: http.StatusInternalServerError},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := chi.NewRouter()
-			service := service.NewMetricService(repository.NewMemStorage())
-			service.UpdateCounter(models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)})
-			service.UpdateGauge(models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)})
 
-			h := NewHandler(service, logger, nil)
+			h := NewHandler(tt.svc, logger)
 			r.Post("/value", h.GetMetric)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -469,7 +497,7 @@ func TestUpdateMetricJson(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
-			h := NewHandler(service, logger, nil)
+			h := NewHandler(service, logger)
 			r.Post("/update", h.UpdateMetric)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -510,7 +538,10 @@ func TestPing(t *testing.T) {
 
 			mock.ExpectPing().WillReturnError(tt.connErr)
 
-			h := NewHandler(nil, logger, db)
+			repo := repository.NewDbStorage(db)
+			svc := service.NewMetricService(repo)
+			h := NewHandler(svc, logger)
+
 			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 			w := httptest.NewRecorder()
 

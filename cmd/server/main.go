@@ -17,6 +17,7 @@ import (
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 )
@@ -30,24 +31,39 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	repo, err := repository.NewFileStorage(serverOptions.FileStorePath, serverOptions.StoreInterval, serverOptions.ToRestore)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	db, err := sql.Open("pgx", serverOptions.DatabaseDsn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+	var (
+		repo service.MetricRepo
+		db   *sql.DB
+	)
 
-	go repository.SaveMetricsJob(ctx, serverOptions.StoreInterval, repo, logger)
+	// choose storage
+	if serverOptions.DatabaseDsn != "" {
+		db, err = sql.Open("pgx", serverOptions.DatabaseDsn)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		performMigrate(serverOptions.DatabaseDsn, logger)
+
+		repo = repository.NewDbStorage(db)
+
+	} else if serverOptions.FileStorePath != "" {
+		frepo, err := repository.NewFileStorage(serverOptions.FileStorePath, serverOptions.StoreInterval, serverOptions.ToRestore)
+		if err != nil {
+			log.Fatal(err)
+		}
+		repo = frepo
+		go repository.SaveMetricsJob(ctx, serverOptions.StoreInterval, frepo, logger)
+	} else {
+		repo = repository.NewMemStorage()
+	}
 
 	svc := service.NewMetricService(repo)
-	h := handler.NewHandler(svc, logger, db)
+	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
 		Addr:    serverOptions.RunAddr,
 		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, compress.Compress(logger)),
@@ -67,14 +83,16 @@ func main() {
 		logger.Fatal("Failed to start application", zap.Error(err))
 	}
 
-	// dump metrics before quitting
-	repo.Close()
-
 	// after SIGINT we give server 5 seconds to cleanup
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = srv.Shutdown(shutdownCtx)
 	if err != nil {
 		logger.Fatal("Failed to gracefully shutdown the server", zap.Error(err))
+	}
+
+	err = repo.Close()
+	if err != nil {
+		logger.Error("Error closing repo", zap.Error(err))
 	}
 }
