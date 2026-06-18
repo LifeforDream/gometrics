@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,10 +35,20 @@ type MetricService interface {
 type Handler struct {
 	service MetricService
 	logger  *zap.Logger
+	db      *sql.DB
 }
 
-func NewHandler(service *service.MetricService, logger *zap.Logger) *Handler {
-	return &Handler{service: service, logger: logger}
+func NewHandler(service *service.MetricService, logger *zap.Logger, db *sql.DB) *Handler {
+	return &Handler{service: service, logger: logger, db: db}
+}
+
+func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
+	if err := h.db.PingContext(r.Context()); err != nil {
+		h.logger.Error("Connection to database can't be established", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {

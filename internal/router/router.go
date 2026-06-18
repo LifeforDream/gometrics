@@ -14,6 +14,7 @@ func MetricsRouter(h *handler.Handler, middlewares ...func(http.Handler) http.Ha
 		r.Use(middleware)
 	}
 
+	r.Get("/ping", h.Ping)
 	r.Get("/", h.GetMetrics)
 	r.Get("/value/{type}/{name}", h.GetMetricValue)
 	r.Post("/value", h.GetMetric)

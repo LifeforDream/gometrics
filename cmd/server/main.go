@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 )
 
@@ -36,10 +38,16 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	db, err := sql.Open("pgx", serverOptions.DatabaseDsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
 	go repository.SaveMetricsJob(ctx, serverOptions.StoreInterval, repo, logger)
 
 	svc := service.NewMetricService(repo)
-	h := handler.NewHandler(svc, logger)
+	h := handler.NewHandler(svc, logger, db)
 	srv := &http.Server{
 		Addr:    serverOptions.RunAddr,
 		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, compress.Compress(logger)),

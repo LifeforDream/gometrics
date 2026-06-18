@@ -13,6 +13,7 @@ type ServerOptions struct {
 	StoreInterval int    `env:"STORE_INTERVAL"`
 	FileStorePath string `env:"FILE_STORAGE_PATH"`
 	ToRestore     bool   `env:"RESTORE"`
+	DatabaseDsn   string `env:"DATABASE_DSN"`
 }
 
 func parseOptions(args ...string) (*ServerOptions, error) {
@@ -24,6 +25,7 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 	fs.IntVar(&serverOptions.StoreInterval, "i", 300, "interval to store current values on disk")
 	fs.StringVar(&serverOptions.FileStorePath, "f", "metrics.json", "path to metrics storage on disk")
 	fs.BoolVar(&serverOptions.ToRestore, "r", true, "signal to restore metrics values from disk")
+	fs.StringVar(&serverOptions.DatabaseDsn, "d", "", "connection string to connect to database")
 
 	if args == nil {
 		args = os.Args[1:]

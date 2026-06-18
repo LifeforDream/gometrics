@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -36,6 +38,7 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path string) (*http.
 
 func TestGetMetrics(t *testing.T) {
 	logger := zap.NewNop()
+
 	type metric struct {
 		mtype string
 		name  string
@@ -67,7 +70,7 @@ func TestGetMetrics(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 
-			h := NewHandler(service, logger)
+			h := NewHandler(service, logger, nil)
 			r.Get("/", h.GetMetrics)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -141,7 +144,7 @@ func TestGetMetric(t *testing.T) {
 			service.UpdateCounterByName("pollcount", 2)
 			service.UpdateGaugeByName("alloc", 1.25)
 
-			h := NewHandler(service, logger)
+			h := NewHandler(service, logger, nil)
 			r.Get("/value/{type}/{name}", h.GetMetricValue)
 
 			ts := httptest.NewServer(r)
@@ -255,7 +258,7 @@ func TestUpdateMetric(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
 
-			h := NewHandler(service, logger)
+			h := NewHandler(service, logger, nil)
 			r.Post("/update/{type}/{name}/{value}", h.UpdateMetricValue)
 
 			ts := httptest.NewServer(r)
@@ -362,7 +365,7 @@ func TestGetMetricJson(t *testing.T) {
 			service.UpdateCounter(models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)})
 			service.UpdateGauge(models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)})
 
-			h := NewHandler(service, logger)
+			h := NewHandler(service, logger, nil)
 			r.Post("/value", h.GetMetric)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -466,7 +469,7 @@ func TestUpdateMetricJson(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := chi.NewRouter()
 			service := service.NewMetricService(repository.NewMemStorage())
-			h := NewHandler(service, logger)
+			h := NewHandler(service, logger, nil)
 			r.Post("/update", h.UpdateMetric)
 			ts := httptest.NewServer(r)
 			defer ts.Close()
@@ -477,6 +480,44 @@ func TestUpdateMetricJson(t *testing.T) {
 
 			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/update", tt.input.contentType, tt.input.rawBody)
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
+		})
+	}
+}
+
+func TestPing(t *testing.T) {
+	logger := zap.NewNop()
+	tests := []struct {
+		name       string
+		connErr    error
+		statusCode int
+	}{
+		{
+			name:       "success 200",
+			connErr:    nil,
+			statusCode: http.StatusOK,
+		},
+		{
+			name:       "error 500",
+			connErr:    errors.New("connection unavailable"),
+			statusCode: http.StatusInternalServerError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+			require.NoError(t, err)
+			defer db.Close()
+
+			mock.ExpectPing().WillReturnError(tt.connErr)
+
+			h := NewHandler(nil, logger, db)
+			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+			w := httptest.NewRecorder()
+
+			h.Ping(w, req)
+
+			assert.Equal(t, tt.statusCode, w.Code)
+			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
 }
