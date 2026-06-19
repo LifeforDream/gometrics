@@ -59,7 +59,7 @@ func (ds *DbStorage) GetMetric(ctx context.Context, name string) (models.Metrics
 }
 
 func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
-	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype"
+	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype"
 	result, err := ds.db.ExecContext(ctx, query, metric.ID, metric.MType, nil, *metric.Value, metric.Hash)
 	if err != nil {
 		return err
@@ -85,7 +85,7 @@ func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error 
 }
 
 func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
-	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype"
+	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype"
 	result, err := ds.db.ExecContext(ctx, query, metric.ID, metric.MType, *metric.Delta, nil, metric.Hash)
 	if err != nil {
 		return err
