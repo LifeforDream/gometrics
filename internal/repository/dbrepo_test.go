@@ -156,7 +156,7 @@ func TestDbSetGauge(t *testing.T) {
 			name:   "insert new gauge",
 			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.25)},
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("alloc", "gauge", nil, 1.25, "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
@@ -165,7 +165,7 @@ func TestDbSetGauge(t *testing.T) {
 			name:   "update existing gauge replaces value",
 			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 2.5)},
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("alloc", "gauge", nil, 2.5, "").
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
@@ -174,7 +174,7 @@ func TestDbSetGauge(t *testing.T) {
 			name:   "type conflict with existing counter",
 			metric: models.Metrics{ID: "pollcount", MType: models.Gauge, Value: utils.FloatPtr(t, 1.0)},
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("pollcount", "gauge", nil, 1.0, "").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT mtype FROM metrics WHERE id = $1")).
@@ -220,7 +220,7 @@ func TestDbUpdateCounter(t *testing.T) {
 			name:   "insert new counter",
 			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 5)},
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("pollcount", "counter", 5, nil, "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
@@ -229,7 +229,7 @@ func TestDbUpdateCounter(t *testing.T) {
 			name:   "accumulate existing counter",
 			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 3)},
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("pollcount", "counter", 3, nil, "").
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
@@ -238,7 +238,7 @@ func TestDbUpdateCounter(t *testing.T) {
 			name:   "type conflict with existing gauge",
 			metric: models.Metrics{ID: "alloc", MType: models.Counter, Delta: utils.IntPtr(t, 1)},
 			setup: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
+				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET metrics.delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("alloc", "counter", 1, nil, "").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT mtype FROM metrics WHERE id = $1")).
