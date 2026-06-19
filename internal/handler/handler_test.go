@@ -300,6 +300,10 @@ func (s *stubService) GetMetric(ctx context.Context, metricType, name string) (m
 	return models.Metrics{}, s.wantErr
 }
 
+func (s *stubService) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	return s.wantErr
+}
+
 func TestGetMetricJson(t *testing.T) {
 	logger := zap.NewNop()
 	defaultservice := service.NewMetricService(repository.NewMemStorage())
@@ -507,6 +511,98 @@ func TestUpdateMetricJson(t *testing.T) {
 			}
 
 			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/update", tt.input.contentType, tt.input.rawBody)
+			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
+		})
+	}
+}
+
+func TestUpdateMetricsBatch(t *testing.T) {
+	logger := zap.NewNop()
+	type inputParams struct {
+		contentType string
+		rawBody     string
+	}
+	type want struct {
+		statusCode int
+	}
+	tests := []struct {
+		name  string
+		svc   MetricService
+		input inputParams
+		want  want
+	}{
+		{
+			name: "valid batch with gauge and counter",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `[{"id":"alloc","type":"gauge","value":1.25},{"id":"pollcount","type":"counter","delta":5}]`,
+			},
+			want: want{statusCode: http.StatusOK},
+		},
+		{
+			name: "wrong content type",
+			input: inputParams{
+				contentType: "text/plain",
+				rawBody:     `[{"id":"alloc","type":"gauge","value":1.25}]`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "malformed json",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `not-json`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "counter without delta",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `[{"id":"pollcount","type":"counter"}]`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "gauge without value",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `[{"id":"alloc","type":"gauge"}]`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "unknown metric type in batch",
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `[{"id":"bad","type":"invalid","value":1.0}]`,
+			},
+			want: want{statusCode: http.StatusBadRequest},
+		},
+		{
+			name: "500 on service error",
+			svc:  &stubService{MetricService: service.NewMetricService(repository.NewMemStorage()), wantErr: errors.New("db error")},
+			input: inputParams{
+				contentType: "application/json",
+				rawBody:     `[{"id":"alloc","type":"gauge","value":1.25}]`,
+			},
+			want: want{statusCode: http.StatusInternalServerError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := tt.svc
+			if svc == nil {
+				svc = service.NewMetricService(repository.NewMemStorage())
+			}
+			r := chi.NewRouter()
+			h := NewHandler(svc, logger)
+			r.Post("/updates", h.UpdateMetrics)
+			ts := httptest.NewServer(r)
+			defer ts.Close()
+
+			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/updates", tt.input.contentType, tt.input.rawBody)
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 		})
 	}

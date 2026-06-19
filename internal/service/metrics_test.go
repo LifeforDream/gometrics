@@ -222,6 +222,75 @@ func TestUpdateCounter(t *testing.T) {
 	}
 }
 
+func TestUpdateMetrics(t *testing.T) {
+	tests := []struct {
+		name    string
+		setUp   []models.Metrics
+		input   []models.Metrics
+		wantErr bool
+		verify  func(t *testing.T, s *MetricService)
+	}{
+		{
+			name: "mixed batch applied",
+			input: []models.Metrics{
+				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 3)},
+			},
+			verify: func(t *testing.T, s *MetricService) {
+				g, err := s.GetMetric(t.Context(), models.Gauge, "alloc")
+				require.NoError(t, err)
+				assert.Equal(t, 1.25, *g.Value)
+
+				c, err := s.GetMetric(t.Context(), models.Counter, "pollcount")
+				require.NoError(t, err)
+				assert.Equal(t, int64(3), *c.Delta)
+			},
+		},
+		{
+			name:  "counter accumulates over existing value",
+			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 2)}},
+			input: []models.Metrics{
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 3)},
+			},
+			verify: func(t *testing.T, s *MetricService) {
+				c, err := s.GetMetric(t.Context(), models.Counter, "pollcount")
+				require.NoError(t, err)
+				assert.Equal(t, int64(5), *c.Delta)
+			},
+		},
+		{
+			name:    "error propagated from repository",
+			input:   []models.Metrics{{ID: "bad", MType: "invalid", Value: utils.FloatPtr(t, 1.0)}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := repository.NewMemStorage()
+			s := NewMetricService(repo)
+			for _, m := range tt.setUp {
+				if m.MType == models.Counter {
+					repo.UpdateCounter(t.Context(), m)
+				} else {
+					repo.SetGauge(t.Context(), m)
+				}
+			}
+
+			err := s.UpdateMetrics(t.Context(), tt.input)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			if tt.verify != nil {
+				tt.verify(t, s)
+			}
+		})
+	}
+}
+
 func TestMetricConflicts(t *testing.T) {
 	repo := repository.NewMemStorage()
 	s := NewMetricService(repo)

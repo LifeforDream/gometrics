@@ -6,7 +6,10 @@ import (
 )
 
 var (
-	MetricNotFound = errors.New("metric not found")
+	MetricNotFound        = errors.New("metric not found")
+	NonexistentMetricType = errors.New("non-existent metric type")
+	EmptyCounterDelta     = errors.New("empty delta field for counter")
+	EmptyGaugeValue       = errors.New("empty value field for gauge")
 )
 
 type InvalidMetricType struct {

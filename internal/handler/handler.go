@@ -29,6 +29,8 @@ type MetricService interface {
 	GetMetric(ctx context.Context, metricType string, name string) (models.Metrics, error)
 	UpdateGauge(ctx context.Context, metric models.Metrics) error
 	UpdateCounter(ctx context.Context, metric models.Metrics) error
+	UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
+	ValidateMetric(metric models.Metrics) error
 	Ping(ctx context.Context) error
 }
 
@@ -213,25 +215,18 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch req.MType {
-	case models.Counter:
-		if req.Delta == nil {
-			h.logger.Debug("Empty Delta field for Counter")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		servErr = h.service.UpdateCounter(r.Context(), req)
-	case models.Gauge:
-		if req.Value == nil {
-			h.logger.Debug("Empty Value field for Gauge")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		servErr = h.service.UpdateGauge(r.Context(), req)
-	default:
-		h.logger.Debug("Unexpected metric type", zap.String("type", req.MType))
+	valErr := h.service.ValidateMetric(req)
+	if valErr != nil {
+		h.logger.Debug("Invalid metric in Update", zap.String("metricName", req.ID), zap.Error(valErr))
 		w.WriteHeader(http.StatusBadRequest)
 		return
+	}
+
+	switch req.MType {
+	case models.Counter:
+		servErr = h.service.UpdateCounter(r.Context(), req)
+	case models.Gauge:
+		servErr = h.service.UpdateGauge(r.Context(), req)
 	}
 
 	if servErr != nil {
@@ -247,4 +242,48 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	h.logger.Debug("sending HTTP 200 response")
+}
+
+func (h *Handler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
+	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	var req []models.Metrics
+	var servErr error
+
+	h.logger.Debug("decoding request")
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	for _, m := range req {
+		valErr := h.service.ValidateMetric(m)
+		if valErr != nil {
+			h.logger.Debug("Validation failed metric in UpdateMetrics", zap.String("metricName", m.ID), zap.Error(valErr))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
+
+	servErr = h.service.UpdateMetrics(r.Context(), req)
+	if servErr != nil {
+		var invalidTypeErr myErrors.InvalidMetricType
+		if errors.As(servErr, &invalidTypeErr) {
+			h.logger.Error("Invalid metric type on batch update", zap.String("newType", invalidTypeErr.NewType))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		h.logger.Error("Unexpected error while updating metrics", zap.Error(servErr))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	h.logger.Debug("sending HTTP 200 response")
+
 }

@@ -59,8 +59,22 @@ func (ds *DbStorage) GetMetric(ctx context.Context, name string) (models.Metrics
 }
 
 func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
+	tx, err := ds.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	err = ds.setGauge(ctx, tx, metric)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (ds *DbStorage) setGauge(ctx context.Context, tx *sql.Tx, metric models.Metrics) error {
 	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype"
-	result, err := ds.db.ExecContext(ctx, query, metric.ID, metric.MType, nil, *metric.Value, metric.Hash)
+	result, err := tx.ExecContext(ctx, query, metric.ID, metric.MType, nil, *metric.Value, metric.Hash)
 	if err != nil {
 		return err
 	}
@@ -71,7 +85,7 @@ func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error 
 	if n == 0 {
 		// there was ID conflict, but mtypes were different
 		var existingType string
-		row := ds.db.QueryRowContext(ctx, "SELECT mtype FROM metrics WHERE id = $1", metric.ID)
+		row := tx.QueryRowContext(ctx, "SELECT mtype FROM metrics WHERE id = $1", metric.ID)
 		if scanErr := row.Scan(&existingType); scanErr != nil {
 			existingType = "unknown"
 		}
@@ -85,8 +99,22 @@ func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error 
 }
 
 func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
+	tx, err := ds.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	err = ds.updateCounter(ctx, tx, metric)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (ds *DbStorage) updateCounter(ctx context.Context, tx *sql.Tx, metric models.Metrics) error {
 	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype"
-	result, err := ds.db.ExecContext(ctx, query, metric.ID, metric.MType, *metric.Delta, nil, metric.Hash)
+	result, err := tx.ExecContext(ctx, query, metric.ID, metric.MType, *metric.Delta, nil, metric.Hash)
 	if err != nil {
 		return err
 	}
@@ -97,7 +125,7 @@ func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) e
 	if n == 0 {
 		// there was ID conflict, but mtypes were different
 		var existingType string
-		row := ds.db.QueryRowContext(ctx, "SELECT mtype FROM metrics WHERE id = $1", metric.ID)
+		row := tx.QueryRowContext(ctx, "SELECT mtype FROM metrics WHERE id = $1", metric.ID)
 		if scanErr := row.Scan(&existingType); scanErr != nil {
 			existingType = "unknown"
 		}
@@ -108,6 +136,29 @@ func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) e
 		}
 	}
 	return nil
+}
+
+func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	tx, err := ds.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Counter:
+			err = ds.updateCounter(ctx, tx, metric)
+		case models.Gauge:
+			err = ds.setGauge(ctx, tx, metric)
+		default:
+			err = myErrors.NonexistentMetricType
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (ds *DbStorage) Close() error {

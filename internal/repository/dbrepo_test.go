@@ -156,30 +156,36 @@ func TestDbSetGauge(t *testing.T) {
 			name:   "insert new gauge",
 			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.25)},
 			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("alloc", "gauge", nil, 1.25, "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
 			},
 		},
 		{
 			name:   "update existing gauge replaces value",
 			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 2.5)},
 			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("alloc", "gauge", nil, 2.5, "").
 					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
 			},
 		},
 		{
 			name:   "type conflict with existing counter",
 			metric: models.Metrics{ID: "pollcount", MType: models.Gauge, Value: utils.FloatPtr(t, 1.0)},
 			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("pollcount", "gauge", nil, 1.0, "").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT mtype FROM metrics WHERE id = $1")).
 					WithArgs("pollcount").
 					WillReturnRows(sqlmock.NewRows([]string{"MType"}).AddRow("counter"))
+				mock.ExpectRollback()
 			},
 			wantErr:          true,
 			wantTypeConflict: true,
@@ -220,30 +226,36 @@ func TestDbUpdateCounter(t *testing.T) {
 			name:   "insert new counter",
 			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 5)},
 			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("pollcount", "counter", 5, nil, "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
 			},
 		},
 		{
 			name:   "accumulate existing counter",
 			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 3)},
 			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("pollcount", "counter", 3, nil, "").
 					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
 			},
 		},
 		{
 			name:   "type conflict with existing gauge",
 			metric: models.Metrics{ID: "alloc", MType: models.Counter, Delta: utils.IntPtr(t, 1)},
 			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
 					WithArgs("alloc", "counter", 1, nil, "").
 					WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT mtype FROM metrics WHERE id = $1")).
 					WithArgs("alloc").
 					WillReturnRows(sqlmock.NewRows([]string{"MType"}).AddRow("gauge"))
+				mock.ExpectRollback()
 			},
 			wantErr:          true,
 			wantTypeConflict: true,
@@ -264,6 +276,83 @@ func TestDbUpdateCounter(t *testing.T) {
 					var typeErr myErrors.InvalidMetricType
 					assert.True(t, errors.As(err, &typeErr))
 				}
+			} else {
+				require.NoError(t, err)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestDbUpdateMetrics(t *testing.T) {
+	gaugeSQL := regexp.QuoteMeta(`INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype`)
+	counterSQL := regexp.QuoteMeta(`INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype`)
+
+	tests := []struct {
+		name    string
+		input   []models.Metrics
+		setup   func(sqlmock.Sqlmock)
+		wantErr bool
+	}{
+		{
+			name: "success with gauge and counter",
+			input: []models.Metrics{
+				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 3)},
+			},
+			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec(gaugeSQL).
+					WithArgs("alloc", "gauge", nil, 1.25, "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(counterSQL).
+					WithArgs("pollcount", "counter", int64(3), nil, "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name: "type conflict on first metric rolls back",
+			input: []models.Metrics{
+				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.0)},
+				{ID: "malloc", MType: models.Gauge, Value: utils.FloatPtr(t, 5.0)},
+			},
+			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec(gaugeSQL).
+					WithArgs("alloc", "gauge", nil, 1.0, "").
+					WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectQuery(regexp.QuoteMeta("SELECT mtype FROM metrics WHERE id = $1")).
+					WithArgs("alloc").
+					WillReturnRows(sqlmock.NewRows([]string{"MType"}).AddRow("counter"))
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+		},
+		{
+			name:  "unknown metric type rolls back",
+			input: []models.Metrics{{ID: "bad", MType: "invalid"}},
+			setup: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+			tt.setup(mock)
+
+			err = NewDbStorage(db).UpdateMetrics(context.Background(), tt.input)
+
+			if tt.wantErr {
+				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}

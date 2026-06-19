@@ -24,11 +24,9 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 		case <-ticker.C:
 			select {
 			case metrics := <-c:
-				for name, metric := range metrics {
-					err := sendMetric(metric.Type, name, serverAddress, metric.Value, client)
-					if err != nil {
-						logger.Error("Error sending metric", zap.String("metricName", name), zap.Error(err))
-					}
+				err := sendMetricBatch(metrics, serverAddress, client)
+				if err != nil {
+					logger.Error("Error sending metrics batch", zap.Error(err))
 				}
 			case <-ctx.Done():
 				return
@@ -40,7 +38,6 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 }
 
 func compress(b *bytes.Buffer) error {
-	// compresses data in place, modifies buffer
 	od, err := io.ReadAll(b)
 	b.Reset()
 
@@ -53,11 +50,11 @@ func compress(b *bytes.Buffer) error {
 	}
 	_, err = w.Write(od)
 	if err != nil {
-		return fmt.Errorf("failed write data to compress temporary buffer: %W", err)
+		return fmt.Errorf("failed write data to compress temporary buffer: %w", err)
 	}
 	err = w.Close()
 	if err != nil {
-		return fmt.Errorf("failed compress data: %W", err)
+		return fmt.Errorf("failed compress data: %w", err)
 	}
 	return nil
 }
@@ -84,19 +81,65 @@ func sendMetric(metricType, metricName, serverAddress string, metricValue float6
 		return fmt.Errorf("unsupported metric type: %s", metricType)
 	}
 
-	// convert to json
 	enc := json.NewEncoder(&buf)
 	if err := enc.Encode(req); err != nil {
 		return err
 	}
 
-	// compress request
 	err := compress(&buf)
 	if err != nil {
 		return err
 	}
 
 	request, err := http.NewRequest(http.MethodPost, serverAddress+"/update", &buf)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Encoding", "gzip")
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+	io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
+func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, client *http.Client) error {
+	var buf bytes.Buffer
+	var payload []models.Metrics
+	for k, v := range metrics {
+		metric := models.Metrics{}
+		metric.ID = k
+		metric.MType = v.Type
+		switch v.Type {
+		case models.Counter:
+			intVal := int64(v.Value)
+			metric.Delta = &intVal
+		case models.Gauge:
+			metric.Value = &v.Value
+		default:
+			return fmt.Errorf("unsupported metric type: %s", v.Type)
+		}
+		payload = append(payload, metric)
+	}
+
+	if len(payload) == 0 {
+		return nil
+	}
+	enc := json.NewEncoder(&buf)
+	if err := enc.Encode(payload); err != nil {
+		return err
+	}
+
+	err := compress(&buf)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequest(http.MethodPost, serverAddress+"/updates", &buf)
 	if err != nil {
 		return err
 	}

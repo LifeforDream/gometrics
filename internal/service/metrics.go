@@ -14,6 +14,7 @@ type MetricRepo interface {
 	GetMetric(ctx context.Context, name string) (models.Metrics, error)
 	SetGauge(ctx context.Context, metric models.Metrics) error
 	UpdateCounter(ctx context.Context, metric models.Metrics) error
+	UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 	Ping(ctx context.Context) error
 	Close() error
 }
@@ -113,4 +114,24 @@ func (s *MetricService) UpdateCounterByName(ctx context.Context, name string, de
 
 func (s *MetricService) UpdateCounter(ctx context.Context, metric models.Metrics) error {
 	return s.repo.UpdateCounter(ctx, metric)
+}
+
+func (s *MetricService) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	return s.repo.UpdateMetrics(ctx, metrics)
+}
+
+func (s *MetricService) ValidateMetric(metric models.Metrics) error {
+	switch metric.MType {
+	case models.Counter:
+		if metric.Delta == nil {
+			return myErrors.EmptyCounterDelta
+		}
+	case models.Gauge:
+		if metric.Value == nil {
+			return myErrors.EmptyGaugeValue
+		}
+	default:
+		return myErrors.NonexistentMetricType
+	}
+	return nil
 }

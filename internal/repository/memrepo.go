@@ -51,12 +51,8 @@ func (m *MemStorage) GetMetric(ctx context.Context, name string) (models.Metrics
 	return metric, nil
 }
 
-func (m *MemStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+func (m *MemStorage) setGauge(metric models.Metrics) error {
 	exist, ok := m.store[metric.ID]
-	// check for type
 	if ok {
 		if exist.MType != models.Gauge {
 			return myErrors.InvalidMetricType{
@@ -70,10 +66,13 @@ func (m *MemStorage) SetGauge(ctx context.Context, metric models.Metrics) error 
 	return nil
 }
 
-func (m *MemStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
+func (m *MemStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.setGauge(metric)
+}
 
+func (m *MemStorage) updateCounter(metric models.Metrics) error {
 	var startVal int64
 
 	exist, ok := m.store[metric.ID]
@@ -91,6 +90,34 @@ func (m *MemStorage) UpdateCounter(ctx context.Context, metric models.Metrics) e
 	newVal := startVal + *metric.Delta
 	metric.Delta = &newVal
 	m.store[metric.ID] = metric
+	return nil
+}
+
+func (m *MemStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.updateCounter(metric)
+}
+
+func (m *MemStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var err error
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Counter:
+			err = m.updateCounter(metric)
+		case models.Gauge:
+			err = m.setGauge(metric)
+		default:
+			err = myErrors.NonexistentMetricType
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
