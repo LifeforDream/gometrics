@@ -11,11 +11,19 @@ import (
 	"time"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
+	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 )
 
 func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string, logger *zap.Logger) {
-	client := &http.Client{}
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
+		return time.Duration(2*attemptNum+1) * time.Second
+	}
+	retryClient.Logger = nil
+
+	client := retryClient.StandardClient()
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
@@ -56,55 +64,6 @@ func compress(b *bytes.Buffer) error {
 	if err != nil {
 		return fmt.Errorf("failed compress data: %w", err)
 	}
-	return nil
-}
-
-func sendMetric(metricType, metricName, serverAddress string, metricValue float64, client *http.Client) error {
-	var buf bytes.Buffer
-	var req models.Metrics
-
-	switch metricType {
-	case models.Counter:
-		intVal := int64(metricValue)
-		req = models.Metrics{
-			ID:    metricName,
-			MType: metricType,
-			Delta: &intVal,
-		}
-	case models.Gauge:
-		req = models.Metrics{
-			ID:    metricName,
-			MType: metricType,
-			Value: &metricValue,
-		}
-	default:
-		return fmt.Errorf("unsupported metric type: %s", metricType)
-	}
-
-	enc := json.NewEncoder(&buf)
-	if err := enc.Encode(req); err != nil {
-		return err
-	}
-
-	err := compress(&buf)
-	if err != nil {
-		return err
-	}
-
-	request, err := http.NewRequest(http.MethodPost, serverAddress+"/update", &buf)
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Encoding", "gzip")
-	request.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
 	return nil
 }
 

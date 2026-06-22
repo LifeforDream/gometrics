@@ -44,17 +44,20 @@ func main() {
 	if serverOptions.DatabaseDsn != "" {
 		db, err = sql.Open("pgx", serverOptions.DatabaseDsn)
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatal("Error opening connection to db", zap.Error(err))
 		}
 
-		performMigrate(serverOptions.DatabaseDsn, logger)
+		err = performMigrate(serverOptions.DatabaseDsn, logger)
+		if err != nil {
+			logger.Fatal("Error performing migration", zap.Error(err))
+		}
 
 		repo = repository.NewDbStorage(db)
 
 	} else if serverOptions.FileStorePath != "" {
 		frepo, err := repository.NewFileStorage(serverOptions.FileStorePath, serverOptions.StoreInterval, serverOptions.ToRestore)
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatal("Error creating file storage", zap.Error(err))
 		}
 		repo = frepo
 		go repository.SaveMetricsJob(ctx, serverOptions.StoreInterval, frepo, logger)
