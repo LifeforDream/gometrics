@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/LifeforDream/gometrics/internal/compress"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
@@ -45,28 +45,6 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 	}
 }
 
-func compress(b *bytes.Buffer) error {
-	od, err := io.ReadAll(b)
-	b.Reset()
-
-	if err != nil {
-		return fmt.Errorf("failed to read from uncompressed data: %w", err)
-	}
-	w, err := gzip.NewWriterLevel(b, gzip.BestCompression)
-	if err != nil {
-		return fmt.Errorf("failed init compress writer: %w", err)
-	}
-	_, err = w.Write(od)
-	if err != nil {
-		return fmt.Errorf("failed write data to compress temporary buffer: %w", err)
-	}
-	err = w.Close()
-	if err != nil {
-		return fmt.Errorf("failed compress data: %w", err)
-	}
-	return nil
-}
-
 func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, client *http.Client) error {
 	var buf bytes.Buffer
 	var payload []models.Metrics
@@ -94,7 +72,7 @@ func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, clien
 		return err
 	}
 
-	err := compress(&buf)
+	err := compress.Buffer(&buf)
 	if err != nil {
 		return err
 	}

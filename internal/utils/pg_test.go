@@ -55,7 +55,7 @@ func TestWithRetry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := 0
-			err := WithRetryPG(func() error {
+			err := WithRetryPG(t.Context(), func() error {
 				e := tt.responses[calls]
 				calls++
 				return e

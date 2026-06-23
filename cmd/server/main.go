@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -11,14 +10,14 @@ import (
 
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
-	"github.com/LifeforDream/gometrics/internal/middlewares/compress"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
+	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
@@ -37,22 +36,19 @@ func main() {
 
 	var (
 		repo service.MetricRepo
-		db   *sql.DB
 	)
 
 	// choose storage
 	if serverOptions.DatabaseDsn != "" {
-		db, err = sql.Open("pgx", serverOptions.DatabaseDsn)
+		pool, err := pgxpool.New(ctx, serverOptions.DatabaseDsn)
 		if err != nil {
 			logger.Fatal("Error opening connection to db", zap.Error(err))
 		}
 
-		err = performMigrate(serverOptions.DatabaseDsn, logger)
+		repo, err = repository.NewDbStorage(ctx, pool, logger)
 		if err != nil {
-			logger.Fatal("Error performing migration", zap.Error(err))
+			logger.Fatal("Error initializing db storage", zap.Error(err))
 		}
-
-		repo = repository.NewDbStorage(db)
 
 	} else if serverOptions.FileStorePath != "" {
 		frepo, err := repository.NewFileStorage(serverOptions.FileStorePath, serverOptions.StoreInterval, serverOptions.ToRestore)
@@ -69,7 +65,7 @@ func main() {
 	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
 		Addr:    serverOptions.RunAddr,
-		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, compress.Compress(logger)),
+		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, mwcompress.Compress(logger)),
 	}
 
 	serverErr := make(chan error, 1)

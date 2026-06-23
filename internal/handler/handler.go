@@ -82,7 +82,7 @@ func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(err, &invalidTypeErr) {
-			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Debug("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 		} else if errors.Is(err, myErrors.MetricNotFound) {
 			w.WriteHeader(http.StatusNotFound)
@@ -134,7 +134,7 @@ func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Debug("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -176,7 +176,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(err, &invalidTypeErr) {
-			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Debug("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 		} else if errors.Is(err, myErrors.MetricNotFound) {
 			w.WriteHeader(http.StatusNotFound)
@@ -232,7 +232,7 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			h.logger.Error("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Debug("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -275,7 +275,7 @@ func (h *Handler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 	if servErr != nil {
 		var invalidTypeErr myErrors.InvalidMetricType
 		if errors.As(servErr, &invalidTypeErr) {
-			h.logger.Error("Invalid metric type on batch update", zap.String("newType", invalidTypeErr.NewType))
+			h.logger.Debug("Invalid metric type on batch update", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

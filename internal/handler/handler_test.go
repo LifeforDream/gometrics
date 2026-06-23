@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -55,12 +54,12 @@ func TestGetMetrics(t *testing.T) {
 		},
 		{
 			name:  "a counter",
-			input: []models.Metrics{{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 1)}},
+			input: []models.Metrics{{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(1)}},
 			want:  []metric{{"counter", "pollcount", float64(1)}},
 		},
 		{
 			name:  "a gauge",
-			input: []models.Metrics{{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)}},
+			input: []models.Metrics{{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)}},
 			want:  []metric{{"gauge", "alloc", 1.25}},
 		},
 	}
@@ -304,11 +303,15 @@ func (s *stubService) UpdateMetrics(ctx context.Context, metrics []models.Metric
 	return s.wantErr
 }
 
+func (s *stubService) Ping(ctx context.Context) error {
+	return s.wantErr
+}
+
 func TestGetMetricJson(t *testing.T) {
 	logger := zap.NewNop()
 	defaultservice := service.NewMetricService(repository.NewMemStorage())
-	defaultservice.UpdateCounter(t.Context(), models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)})
-	defaultservice.UpdateGauge(t.Context(), models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)})
+	defaultservice.UpdateCounter(t.Context(), models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)})
+	defaultservice.UpdateGauge(t.Context(), models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)})
 
 	type want struct {
 		statusCode int
@@ -326,14 +329,14 @@ func TestGetMetricJson(t *testing.T) {
 			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"pollcount","type":"counter"}`,
-			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)}},
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)}},
 		},
 		{
 			name:        "valid gauge request",
 			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"alloc","type":"gauge"}`,
-			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)}},
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)}},
 		},
 		{
 			name:        "wrong content type",
@@ -628,14 +631,7 @@ func TestPing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
-			require.NoError(t, err)
-			defer db.Close()
-
-			mock.ExpectPing().WillReturnError(tt.connErr)
-
-			repo := repository.NewDbStorage(db)
-			svc := service.NewMetricService(repo)
+			svc := &stubService{wantErr: tt.connErr}
 			h := NewHandler(svc, logger)
 
 			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
@@ -644,7 +640,6 @@ func TestPing(t *testing.T) {
 			h.Ping(w, req)
 
 			assert.Equal(t, tt.statusCode, w.Code)
-			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
 }

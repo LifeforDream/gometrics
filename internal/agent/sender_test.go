@@ -29,8 +29,8 @@ func TestSendMetricBatch(t *testing.T) {
 				"pollcount": {Type: models.Counter, Value: 3},
 			},
 			wantPayload: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(t, 1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(t, 3)},
+				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
 			},
 			hitsServer: true,
 		},

@@ -60,6 +60,16 @@ func (f *FileBackedStorage) UpdateCounter(ctx context.Context, metric models.Met
 	return nil
 }
 
+func (f *FileBackedStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	if err := f.MemStorage.UpdateMetrics(ctx, metrics); err != nil {
+		return err
+	}
+	if f.syncSave {
+		return f.save()
+	}
+	return nil
+}
+
 func (f *FileBackedStorage) save() error {
 	return SaveMetrics(f.fname, f.MemStorage.GetAll())
 }
@@ -83,6 +93,8 @@ func (metrics *metriclist) save(fname string) error {
 	if err != nil {
 		return err
 	}
+	defer tfile.Close()
+
 	data, err := json.MarshalIndent(metrics, "", "   ")
 	if err != nil {
 		return err

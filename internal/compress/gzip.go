@@ -1,7 +1,9 @@
 package compress
 
 import (
+	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -16,7 +18,7 @@ type compressWriter struct {
 	wroteGzip   bool
 }
 
-func newCompressWriter(w http.ResponseWriter, acceptsGzip bool) *compressWriter {
+func NewCompressWriter(w http.ResponseWriter, acceptsGzip bool) *compressWriter {
 	return &compressWriter{
 		w:           w,
 		zw:          gzip.NewWriter(w),
@@ -62,7 +64,7 @@ type compressReader struct {
 	zr *gzip.Reader
 }
 
-func newCompressReader(r io.ReadCloser) (*compressReader, error) {
+func NewCompressReader(r io.ReadCloser) (*compressReader, error) {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, err
@@ -83,4 +85,26 @@ func (c *compressReader) Close() error {
 		return err
 	}
 	return c.zr.Close()
+}
+
+func Buffer(b *bytes.Buffer) error {
+	od, err := io.ReadAll(b)
+	b.Reset()
+
+	if err != nil {
+		return fmt.Errorf("failed to read from uncompressed data: %w", err)
+	}
+	w, err := gzip.NewWriterLevel(b, gzip.BestCompression)
+	if err != nil {
+		return fmt.Errorf("failed init compress writer: %w", err)
+	}
+	_, err = w.Write(od)
+	if err != nil {
+		return fmt.Errorf("failed write data to compress temporary buffer: %w", err)
+	}
+	err = w.Close()
+	if err != nil {
+		return fmt.Errorf("failed compress data: %w", err)
+	}
+	return nil
 }

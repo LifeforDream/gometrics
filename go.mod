@@ -3,11 +3,11 @@ module github.com/LifeforDream/gometrics
 go 1.26.1
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/pashagolub/pgxmock/v5 v5.1.0
 	github.com/stretchr/testify v1.11.1
 )
 

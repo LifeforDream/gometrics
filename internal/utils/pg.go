@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -11,13 +12,17 @@ import (
 
 var retryDelays = []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 
-func WithRetryPG(op func() error) error {
+func WithRetryPG(ctx context.Context, op func() error) error {
 	err := op()
 	for _, d := range retryDelays {
 		if err == nil || !IsRetriablePgError(err) {
 			break
 		}
-		time.Sleep(d)
+		select {
+		case <-time.After(d):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		err = op()
 	}
 	if err != nil {
