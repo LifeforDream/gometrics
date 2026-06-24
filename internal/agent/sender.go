@@ -67,15 +67,27 @@ func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, clien
 	if len(payload) == 0 {
 		return nil
 	}
-	enc := json.NewEncoder(&buf)
-	if err := enc.Encode(payload); err != nil {
-		return err
-	}
 
-	err := compress.Buffer(&buf)
+	d, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
+
+	zw, err := compress.NewWriter(&buf)
+	if err != nil {
+		return err
+	}
+
+	_, err = zw.Write(d)
+	if err != nil {
+		return err
+	}
+
+	err = zw.Close()
+	if err != nil {
+		return err
+	}
+
 	request, err := http.NewRequest(http.MethodPost, serverAddress+"/updates", &buf)
 	if err != nil {
 		return err

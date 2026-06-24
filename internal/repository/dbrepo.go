@@ -41,7 +41,7 @@ func NewDbStorage(ctx context.Context, pool PgxIface, logger *zap.Logger) (*DbSt
 }
 
 func newDbStorageForTest(pool PgxIface) *DbStorage {
-	return &DbStorage{pool: pool}
+	return &DbStorage{pool: pool, logger: zap.NewNop()}
 }
 
 func (ds *DbStorage) performMigrate(ctx context.Context) error {
@@ -140,7 +140,12 @@ func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error 
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback(ctx)
+		defer func() {
+			err = tx.Rollback(ctx)
+			if err != nil {
+				ds.logger.Warn("error on txn rollback", zap.Error(err))
+			}
+		}()
 
 		err = ds.setGauge(ctx, tx, metric)
 		if err != nil {
@@ -179,7 +184,12 @@ func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) e
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback(ctx)
+		defer func() {
+			err = tx.Rollback(ctx)
+			if err != nil {
+				ds.logger.Warn("error on txn rollback", zap.Error(err))
+			}
+		}()
 
 		err = ds.updateCounter(ctx, tx, metric)
 		if err != nil {
@@ -218,7 +228,14 @@ func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback(ctx)
+
+		defer func() {
+			err = tx.Rollback(ctx)
+			if err != nil {
+				ds.logger.Warn("error on txn rollback", zap.Error(err))
+			}
+		}()
+
 		batch := &pgx.Batch{}
 
 		for _, metric := range metrics {
