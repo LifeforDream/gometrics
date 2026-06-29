@@ -40,8 +40,8 @@ func NewFileStorage(fname string, interval int, restore bool) (*FileBackedStorag
 	return f, nil
 }
 
-func (f *FileBackedStorage) SetGauge(m models.Metrics) error {
-	if err := f.MemStorage.SetGauge(m); err != nil {
+func (f *FileBackedStorage) SetGauge(ctx context.Context, m models.Metrics) error {
+	if err := f.MemStorage.SetGauge(ctx, m); err != nil {
 		return err
 	}
 	if f.syncSave {
@@ -50,8 +50,18 @@ func (f *FileBackedStorage) SetGauge(m models.Metrics) error {
 	return nil
 }
 
-func (f *FileBackedStorage) UpdateCounter(metric models.Metrics) error {
-	if err := f.MemStorage.UpdateCounter(metric); err != nil {
+func (f *FileBackedStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
+	if err := f.MemStorage.UpdateCounter(ctx, metric); err != nil {
+		return err
+	}
+	if f.syncSave {
+		return f.save()
+	}
+	return nil
+}
+
+func (f *FileBackedStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	if err := f.MemStorage.UpdateMetrics(ctx, metrics); err != nil {
 		return err
 	}
 	if f.syncSave {
@@ -83,6 +93,8 @@ func (metrics *metriclist) save(fname string) error {
 	if err != nil {
 		return err
 	}
+	defer tfile.Close()
+
 	data, err := json.MarshalIndent(metrics, "", "   ")
 	if err != nil {
 		return err

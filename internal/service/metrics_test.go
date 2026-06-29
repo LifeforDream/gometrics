@@ -22,8 +22,8 @@ func TestGetMetrics(t *testing.T) {
 			name: "get gauge and a counter",
 			repo: repository.NewMemStorage(),
 			input: []models.Metrics{
-				{MType: "counter", ID: "pollcount", Delta: utils.IntPtr(t, 2)},
-				{MType: "gauge", ID: "alloc", Value: utils.FloatPtr(t, 1.25)},
+				{MType: "counter", ID: "pollcount", Delta: utils.IntPtr(2)},
+				{MType: "gauge", ID: "alloc", Value: utils.FloatPtr(1.25)},
 			},
 			want: []string{
 				"pollcount 2",
@@ -40,12 +40,13 @@ func TestGetMetrics(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.input {
 				if metric.MType == "counter" {
-					tt.repo.UpdateCounter(metric)
+					tt.repo.UpdateCounter(t.Context(), metric)
 				} else {
-					tt.repo.SetGauge(metric)
+					tt.repo.SetGauge(t.Context(), metric)
 				}
 			}
-			got := s.GetMetrics()
+			got, err := s.GetMetrics(t.Context())
+			require.NoError(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
@@ -70,7 +71,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "get valid counter",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -83,7 +84,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "get valid gauge",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)},
+				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)},
 			},
 			input: input{
 				name:       "alloc",
@@ -105,7 +106,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "incorrect metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -117,7 +118,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "invalid metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
 			},
 			input: input{
 				name:       "pollcount",
@@ -131,13 +132,13 @@ func TestGetMetricValue(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.setUp {
 				if metric.MType == "counter" {
-					tt.repo.UpdateCounter(metric)
+					tt.repo.UpdateCounter(t.Context(), metric)
 				} else {
-					tt.repo.SetGauge(metric)
+					tt.repo.SetGauge(t.Context(), metric)
 				}
 			}
 
-			got, gotErr := s.GetMetricValue(tt.input.metricType, tt.input.name)
+			got, gotErr := s.GetMetricValue(t.Context(), tt.input.metricType, tt.input.name)
 			if tt.wantErr {
 				require.Error(t, gotErr, "Unexpected success on err %s", gotErr)
 			} else {
@@ -175,10 +176,10 @@ func TestUpdateGauge(t *testing.T) {
 			repo := repository.NewMemStorage()
 			s := NewMetricService(repo)
 			for _, val := range tt.values {
-				s.UpdateGaugeByName(tt.mname, val)
+				s.UpdateGaugeByName(t.Context(), tt.mname, val)
 			}
-			metric, ok := repo.GetMetric(tt.mname)
-			require.True(t, ok, "metric not found in repository")
+			metric, err := repo.GetMetric(t.Context(), tt.mname)
+			require.NoError(t, err, "metric not found in repository")
 			require.Equal(t, tt.wantVal, *metric.Value, "unexpected metric value")
 			require.Equal(t, "gauge", metric.MType, "unexpected metric type")
 		})
@@ -211,12 +212,81 @@ func TestUpdateCounter(t *testing.T) {
 			repo := repository.NewMemStorage()
 			s := NewMetricService(repo)
 			for _, val := range tt.values {
-				s.UpdateCounterByName(tt.mname, val)
+				s.UpdateCounterByName(t.Context(), tt.mname, val)
 			}
-			metric, ok := repo.GetMetric(tt.mname)
-			require.True(t, ok, "metric not found in repository")
+			metric, err := repo.GetMetric(t.Context(), tt.mname)
+			require.NoError(t, err, "metric not found in repository")
 			require.Equal(t, tt.wantVal, *metric.Delta, "unexpected metric value")
 			require.Equal(t, "counter", metric.MType, "unexpected metric type")
+		})
+	}
+}
+
+func TestUpdateMetrics(t *testing.T) {
+	tests := []struct {
+		name    string
+		setUp   []models.Metrics
+		input   []models.Metrics
+		wantErr bool
+		verify  func(t *testing.T, s *MetricService)
+	}{
+		{
+			name: "mixed batch applied",
+			input: []models.Metrics{
+				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+			},
+			verify: func(t *testing.T, s *MetricService) {
+				g, err := s.GetMetric(t.Context(), models.Gauge, "alloc")
+				require.NoError(t, err)
+				assert.Equal(t, 1.25, *g.Value)
+
+				c, err := s.GetMetric(t.Context(), models.Counter, "pollcount")
+				require.NoError(t, err)
+				assert.Equal(t, int64(3), *c.Delta)
+			},
+		},
+		{
+			name:  "counter accumulates over existing value",
+			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(2)}},
+			input: []models.Metrics{
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+			},
+			verify: func(t *testing.T, s *MetricService) {
+				c, err := s.GetMetric(t.Context(), models.Counter, "pollcount")
+				require.NoError(t, err)
+				assert.Equal(t, int64(5), *c.Delta)
+			},
+		},
+		{
+			name:    "error propagated from repository",
+			input:   []models.Metrics{{ID: "bad", MType: "invalid", Value: utils.FloatPtr(1.0)}},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := repository.NewMemStorage()
+			s := NewMetricService(repo)
+			for _, m := range tt.setUp {
+				if m.MType == models.Counter {
+					repo.UpdateCounter(t.Context(), m)
+				} else {
+					repo.SetGauge(t.Context(), m)
+				}
+			}
+
+			err := s.UpdateMetrics(t.Context(), tt.input)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			if tt.verify != nil {
+				tt.verify(t, s)
+			}
 		})
 	}
 }
@@ -226,19 +296,19 @@ func TestMetricConflicts(t *testing.T) {
 	s := NewMetricService(repo)
 
 	// Create a gauge metric
-	err := s.UpdateGaugeByName("Alloc", 23.5)
+	err := s.UpdateGaugeByName(t.Context(), "Alloc", 23.5)
 	assert.NoError(t, err, "failed to create gauge metric: %v", err)
 
 	// Attempt to update the same metric as a counter
-	err = s.UpdateCounterByName("Alloc", 1)
+	err = s.UpdateCounterByName(t.Context(), "Alloc", 1)
 	assert.Error(t, err, "expected error when updating gauge as counter")
 
 	// Create a counter metric
-	err = s.UpdateCounterByName("PollCount", 1)
+	err = s.UpdateCounterByName(t.Context(), "PollCount", 1)
 	assert.NoError(t, err, "failed to create counter metric: %v", err)
 
 	// Attempt to update the same metric as a gauge
-	err = s.UpdateGaugeByName("PollCount", 23.5)
+	err = s.UpdateGaugeByName(t.Context(), "PollCount", 23.5)
 	assert.Error(t, err, "expected error when updating counter as gauge")
 }
 
@@ -259,20 +329,20 @@ func TestGetMetric(t *testing.T) {
 			name: "get valid counter",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
 			},
 			input:   input{"pollcount", "counter"},
-			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
+			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
 			wantErr: false,
 		},
 		{
 			name: "get valid gauge",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)},
+				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)},
 			},
 			input:   input{"alloc", "gauge"},
-			want:    models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(t, 1.25)},
+			want:    models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)},
 			wantErr: false,
 		},
 		{
@@ -285,7 +355,7 @@ func TestGetMetric(t *testing.T) {
 			name: "incorrect metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(t, 2)},
+				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
 			},
 			input:   input{"pollcount", "gauge"},
 			wantErr: true,
@@ -296,12 +366,12 @@ func TestGetMetric(t *testing.T) {
 			s := NewMetricService(tt.repo)
 			for _, metric := range tt.setUp {
 				if metric.MType == "counter" {
-					tt.repo.UpdateCounter(metric)
+					tt.repo.UpdateCounter(t.Context(), metric)
 				} else {
-					tt.repo.SetGauge(metric)
+					tt.repo.SetGauge(t.Context(), metric)
 				}
 			}
-			got, gotErr := s.GetMetric(tt.input.metricType, tt.input.name)
+			got, gotErr := s.GetMetric(t.Context(), tt.input.metricType, tt.input.name)
 			if tt.wantErr {
 				require.Error(t, gotErr)
 			} else {

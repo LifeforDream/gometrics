@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,12 +9,21 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/LifeforDream/gometrics/internal/compress"
 	models "github.com/LifeforDream/gometrics/internal/model"
+	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 )
 
 func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string, logger *zap.Logger) {
-	client := &http.Client{}
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
+		return time.Duration(2*attemptNum+1) * time.Second
+	}
+	retryClient.Logger = nil
+
+	client := retryClient.StandardClient()
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
@@ -24,11 +32,9 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 		case <-ticker.C:
 			select {
 			case metrics := <-c:
-				for name, metric := range metrics {
-					err := sendMetric(metric.Type, name, serverAddress, metric.Value, client)
-					if err != nil {
-						logger.Error("Error sending metric", zap.String("metricName", name), zap.Error(err))
-					}
+				err := sendMetricBatch(metrics, serverAddress, client)
+				if err != nil {
+					logger.Error("Error sending metrics batch", zap.Error(err))
 				}
 			case <-ctx.Done():
 				return
@@ -39,64 +45,50 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 	}
 }
 
-func compress(b *bytes.Buffer) error {
-	// compresses data in place, modifies buffer
-	od, err := io.ReadAll(b)
-	b.Reset()
-
-	if err != nil {
-		return fmt.Errorf("failed to read from uncompressed data: %w", err)
-	}
-	w, err := gzip.NewWriterLevel(b, gzip.BestCompression)
-	if err != nil {
-		return fmt.Errorf("failed init compress writer: %w", err)
-	}
-	_, err = w.Write(od)
-	if err != nil {
-		return fmt.Errorf("failed write data to compress temporary buffer: %W", err)
-	}
-	err = w.Close()
-	if err != nil {
-		return fmt.Errorf("failed compress data: %W", err)
-	}
-	return nil
-}
-
-func sendMetric(metricType, metricName, serverAddress string, metricValue float64, client *http.Client) error {
+func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, client *http.Client) error {
 	var buf bytes.Buffer
-	var req models.Metrics
-
-	switch metricType {
-	case models.Counter:
-		intVal := int64(metricValue)
-		req = models.Metrics{
-			ID:    metricName,
-			MType: metricType,
-			Delta: &intVal,
+	var payload []models.Metrics
+	for k, v := range metrics {
+		metric := models.Metrics{}
+		metric.ID = k
+		metric.MType = v.Type
+		switch v.Type {
+		case models.Counter:
+			intVal := int64(v.Value)
+			metric.Delta = &intVal
+		case models.Gauge:
+			metric.Value = &v.Value
+		default:
+			return fmt.Errorf("unsupported metric type: %s", v.Type)
 		}
-	case models.Gauge:
-		req = models.Metrics{
-			ID:    metricName,
-			MType: metricType,
-			Value: &metricValue,
-		}
-	default:
-		return fmt.Errorf("unsupported metric type: %s", metricType)
+		payload = append(payload, metric)
 	}
 
-	// convert to json
-	enc := json.NewEncoder(&buf)
-	if err := enc.Encode(req); err != nil {
-		return err
+	if len(payload) == 0 {
+		return nil
 	}
 
-	// compress request
-	err := compress(&buf)
+	d, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	request, err := http.NewRequest(http.MethodPost, serverAddress+"/update", &buf)
+	zw, err := compress.NewWriter(&buf)
+	if err != nil {
+		return err
+	}
+
+	_, err = zw.Write(d)
+	if err != nil {
+		return err
+	}
+
+	err = zw.Close()
+	if err != nil {
+		return err
+	}
+
+	request, err := http.NewRequest(http.MethodPost, serverAddress+"/updates", &buf)
 	if err != nil {
 		return err
 	}

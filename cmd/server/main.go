@@ -10,12 +10,14 @@ import (
 
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
-	"github.com/LifeforDream/gometrics/internal/middlewares/compress"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
+	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
 	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
@@ -28,21 +30,42 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	repo, err := repository.NewFileStorage(serverOptions.FileStorePath, serverOptions.StoreInterval, serverOptions.ToRestore)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	go repository.SaveMetricsJob(ctx, serverOptions.StoreInterval, repo, logger)
+	var (
+		repo service.MetricRepo
+	)
+
+	// choose storage
+	if serverOptions.DatabaseDsn != "" {
+		pool, err := pgxpool.New(ctx, serverOptions.DatabaseDsn)
+		if err != nil {
+			logger.Fatal("Error opening connection to db", zap.Error(err))
+		}
+
+		repo, err = repository.NewDbStorage(ctx, pool, logger)
+		if err != nil {
+			logger.Fatal("Error initializing db storage", zap.Error(err))
+		}
+
+	} else if serverOptions.FileStorePath != "" {
+		frepo, err := repository.NewFileStorage(serverOptions.FileStorePath, serverOptions.StoreInterval, serverOptions.ToRestore)
+		if err != nil {
+			logger.Fatal("Error creating file storage", zap.Error(err))
+		}
+		repo = frepo
+		go repository.SaveMetricsJob(ctx, serverOptions.StoreInterval, frepo, logger)
+	} else {
+		repo = repository.NewMemStorage()
+	}
 
 	svc := service.NewMetricService(repo)
 	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
 		Addr:    serverOptions.RunAddr,
-		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, compress.Compress(logger)),
+		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, mwcompress.Compress(logger)),
 	}
 
 	serverErr := make(chan error, 1)
@@ -59,14 +82,16 @@ func main() {
 		logger.Fatal("Failed to start application", zap.Error(err))
 	}
 
-	// dump metrics before quitting
-	repo.Close()
-
 	// after SIGINT we give server 5 seconds to cleanup
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = srv.Shutdown(shutdownCtx)
 	if err != nil {
 		logger.Fatal("Failed to gracefully shutdown the server", zap.Error(err))
+	}
+
+	err = repo.Close()
+	if err != nil {
+		logger.Error("Error closing repo", zap.Error(err))
 	}
 }

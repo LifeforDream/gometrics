@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -9,10 +10,13 @@ import (
 )
 
 type MetricRepo interface {
-	GetAllSlice() []models.Metrics
-	GetMetric(name string) (models.Metrics, bool)
-	SetGauge(metric models.Metrics) error
-	UpdateCounter(metric models.Metrics) error
+	GetAllSlice(ctx context.Context) ([]models.Metrics, error)
+	GetMetric(ctx context.Context, name string) (models.Metrics, error)
+	SetGauge(ctx context.Context, metric models.Metrics) error
+	UpdateCounter(ctx context.Context, metric models.Metrics) error
+	UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
+	Ping(ctx context.Context) error
+	Close() error
 }
 
 type MetricService struct {
@@ -23,8 +27,15 @@ func NewMetricService(repo MetricRepo) *MetricService {
 	return &MetricService{repo: repo}
 }
 
-func (s *MetricService) GetMetrics() []string {
-	metrics := s.repo.GetAllSlice()
+func (s *MetricService) Ping(ctx context.Context) error {
+	return s.repo.Ping(ctx)
+}
+
+func (s *MetricService) GetMetrics(ctx context.Context) ([]string, error) {
+	metrics, err := s.repo.GetAllSlice(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var out []string
 	for _, v := range metrics {
 		switch v.MType {
@@ -34,13 +45,13 @@ func (s *MetricService) GetMetrics() []string {
 			out = append(out, fmt.Sprintf("%s %d", v.ID, *v.Delta))
 		}
 	}
-	return out
+	return out, nil
 }
 
-func (s *MetricService) GetMetricValue(metricType, name string) (string, error) {
-	metric, ok := s.repo.GetMetric(name)
-	if !ok {
-		return "", myErrors.MetricNotFound
+func (s *MetricService) GetMetricValue(ctx context.Context, metricType, name string) (string, error) {
+	metric, err := s.repo.GetMetric(ctx, name)
+	if err != nil {
+		return "", err
 	}
 	if metric.MType != metricType {
 		return "", myErrors.InvalidMetricType{
@@ -62,10 +73,10 @@ func (s *MetricService) GetMetricValue(metricType, name string) (string, error) 
 	}
 }
 
-func (s *MetricService) GetMetric(metricType, name string) (models.Metrics, error) {
-	metric, ok := s.repo.GetMetric(name)
-	if !ok {
-		return models.Metrics{}, myErrors.MetricNotFound
+func (s *MetricService) GetMetric(ctx context.Context, metricType, name string) (models.Metrics, error) {
+	metric, err := s.repo.GetMetric(ctx, name)
+	if err != nil {
+		return models.Metrics{}, err
 	}
 	if metric.MType != metricType {
 		return models.Metrics{}, myErrors.InvalidMetricType{
@@ -77,30 +88,50 @@ func (s *MetricService) GetMetric(metricType, name string) (models.Metrics, erro
 	return metric, nil
 }
 
-func (s *MetricService) UpdateGaugeByName(name string, value float64) error {
+func (s *MetricService) UpdateGaugeByName(ctx context.Context, name string, value float64) error {
 	metric := models.Metrics{
 		ID:    name,
 		MType: models.Gauge,
 		Value: &value,
 	}
-	err := s.repo.SetGauge(metric)
+	err := s.repo.SetGauge(ctx, metric)
 	return err
 }
 
-func (s *MetricService) UpdateGauge(metric models.Metrics) error {
-	return s.repo.SetGauge(metric)
+func (s *MetricService) UpdateGauge(ctx context.Context, metric models.Metrics) error {
+	return s.repo.SetGauge(ctx, metric)
 }
 
-func (s *MetricService) UpdateCounterByName(name string, delta int64) error {
+func (s *MetricService) UpdateCounterByName(ctx context.Context, name string, delta int64) error {
 	metric := models.Metrics{
 		ID:    name,
 		MType: models.Counter,
 		Delta: &delta,
 	}
-	err := s.repo.UpdateCounter(metric)
+	err := s.repo.UpdateCounter(ctx, metric)
 	return err
 }
 
-func (s *MetricService) UpdateCounter(metric models.Metrics) error {
-	return s.repo.UpdateCounter(metric)
+func (s *MetricService) UpdateCounter(ctx context.Context, metric models.Metrics) error {
+	return s.repo.UpdateCounter(ctx, metric)
+}
+
+func (s *MetricService) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	return s.repo.UpdateMetrics(ctx, metrics)
+}
+
+func (s *MetricService) ValidateMetric(metric models.Metrics) error {
+	switch metric.MType {
+	case models.Counter:
+		if metric.Delta == nil {
+			return myErrors.EmptyCounterDelta
+		}
+	case models.Gauge:
+		if metric.Value == nil {
+			return myErrors.EmptyGaugeValue
+		}
+	default:
+		return myErrors.NonexistentMetricType
+	}
+	return nil
 }

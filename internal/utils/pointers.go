@@ -1,13 +1,9 @@
 package utils
 
-import "testing"
-
-func FloatPtr(t *testing.T, f float64) *float64 {
-	t.Helper()
+func FloatPtr(f float64) *float64 {
 	return &f
 }
 
-func IntPtr(t *testing.T, i int64) *int64 {
-	t.Helper()
+func IntPtr(i int64) *int64 {
 	return &i
 }

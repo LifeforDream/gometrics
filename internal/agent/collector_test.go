@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func Test_buildSnapshot(t *testing.T) {
+func TestBuildSnapshot(t *testing.T) {
 	metricNames := []string{
 		"Alloc",
 		"BuckHashSys",

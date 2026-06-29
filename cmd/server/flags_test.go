@@ -21,6 +21,7 @@ func TestParseOptions(t *testing.T) {
 				"-i", "350",
 				"-f", "m.json",
 				"-r", "f",
+				"-d", "postgres://u:u@localhost/db",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
@@ -28,6 +29,7 @@ func TestParseOptions(t *testing.T) {
 				"STORE_INTERVAL":    "150",
 				"FILE_STORAGE_PATH": "file.txt",
 				"RESTORE":           "t",
+				"DATABASE_DSN":      "postgres://a:a@localhost/a",
 			},
 			expected: ServerOptions{
 				RunAddr:       "localhost:8082",
@@ -35,6 +37,7 @@ func TestParseOptions(t *testing.T) {
 				StoreInterval: 150,
 				FileStorePath: "file.txt",
 				ToRestore:     true,
+				DatabaseDsn:   "postgres://a:a@localhost/a",
 			},
 		},
 		{
@@ -45,8 +48,9 @@ func TestParseOptions(t *testing.T) {
 				RunAddr:       "localhost:8085",
 				LogLevel:      "info",
 				StoreInterval: 300,
-				FileStorePath: "metrics.json",
+				FileStorePath: "",
 				ToRestore:     true,
+				DatabaseDsn:   "",
 			},
 		},
 		{
@@ -57,8 +61,22 @@ func TestParseOptions(t *testing.T) {
 				RunAddr:       "localhost:8082",
 				LogLevel:      "info",
 				StoreInterval: 300,
-				FileStorePath: "metrics.json",
+				FileStorePath: "",
 				ToRestore:     true,
+				DatabaseDsn:   "",
+			},
+		},
+		{
+			name:      "db flag only",
+			args:      []string{"-d", "postgres://u:u@localhost/db"},
+			envParams: map[string]string{},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				FileStorePath: "",
+				ToRestore:     true,
+				DatabaseDsn:   "postgres://u:u@localhost/db",
 			},
 		},
 		{
@@ -69,8 +87,9 @@ func TestParseOptions(t *testing.T) {
 				RunAddr:       "localhost:8080",
 				LogLevel:      "info",
 				StoreInterval: 300,
-				FileStorePath: "metrics.json",
+				FileStorePath: "",
 				ToRestore:     true,
+				DatabaseDsn:   "",
 			},
 		},
 	}
@@ -86,6 +105,7 @@ func TestParseOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.LogLevel, result.LogLevel)
 			assert.Equal(t, tt.expected.StoreInterval, result.StoreInterval)
 			assert.Equal(t, tt.expected.ToRestore, result.ToRestore)
+			assert.Equal(t, tt.expected.DatabaseDsn, result.DatabaseDsn)
 		})
 	}
 }

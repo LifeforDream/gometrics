@@ -14,11 +14,13 @@ func MetricsRouter(h *handler.Handler, middlewares ...func(http.Handler) http.Ha
 		r.Use(middleware)
 	}
 
+	r.Get("/ping", h.Ping)
 	r.Get("/", h.GetMetrics)
 	r.Get("/value/{type}/{name}", h.GetMetricValue)
 	r.Post("/value", h.GetMetric)
 	r.Post("/update/{type}/{name}/{value}", h.UpdateMetricValue)
 	r.Post("/update", h.UpdateMetric)
+	r.Post("/updates", h.UpdateMetrics)
 
 	return r
 }
