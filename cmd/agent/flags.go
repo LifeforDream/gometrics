@@ -11,8 +11,9 @@ import (
 type AgentOptions struct {
 	Address        string `env:"ADDRESS"`
 	Secure         bool
-	PollInterval   int `env:"POLL_INTERVAL"`
-	ReportInterval int `env:"REPORT_INTERVAL"`
+	PollInterval   int    `env:"POLL_INTERVAL"`
+	ReportInterval int    `env:"REPORT_INTERVAL"`
+	HashKey        string `env:"KEY"`
 }
 
 func parseOptions(args ...string) (*AgentOptions, error) {
@@ -23,6 +24,7 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	fs.BoolVar(&agentOptions.Secure, "secure", false, "flag to indicate usage of secure channel")
 	fs.IntVar(&agentOptions.PollInterval, "p", 2, "poll interval in seconds")
 	fs.IntVar(&agentOptions.ReportInterval, "r", 10, "report interval in seconds")
+	fs.StringVar(&agentOptions.HashKey, "k", "", "hash key")
 
 	if args == nil {
 		args = os.Args[1:]

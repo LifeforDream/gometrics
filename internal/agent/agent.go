@@ -15,6 +15,7 @@ type Config struct {
 	PollInterval   int
 	ReportInterval int
 	ServerAddr     string
+	HashKey        string
 }
 
 type Agent struct {
@@ -28,5 +29,5 @@ func New(cfg Config) *Agent {
 func (a *Agent) Run(ctx context.Context, logger *zap.Logger) {
 	c := make(chan map[string]AgentMetric, 1)
 	go collect(ctx, a.cfg.PollInterval, c)
-	go send(ctx, a.cfg.ReportInterval, c, a.cfg.ServerAddr, logger)
+	go send(ctx, a.cfg.ReportInterval, c, a.cfg.ServerAddr, a.cfg.HashKey, logger)
 }

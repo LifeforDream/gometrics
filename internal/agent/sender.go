@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,11 +12,12 @@ import (
 
 	"github.com/LifeforDream/gometrics/internal/compress"
 	models "github.com/LifeforDream/gometrics/internal/model"
+	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 )
 
-func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress string, logger *zap.Logger) {
+func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress, hashKey string, logger *zap.Logger) {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
@@ -32,7 +34,7 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 		case <-ticker.C:
 			select {
 			case metrics := <-c:
-				err := sendMetricBatch(metrics, serverAddress, client)
+				err := sendMetricBatch(metrics, serverAddress, hashKey, client)
 				if err != nil {
 					logger.Error("Error sending metrics batch", zap.Error(err))
 				}
@@ -45,7 +47,7 @@ func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serv
 	}
 }
 
-func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, client *http.Client) error {
+func sendMetricBatch(metrics map[string]AgentMetric, serverAddress, hashKey string, client *http.Client) error {
 	var buf bytes.Buffer
 	var payload []models.Metrics
 	for k, v := range metrics {
@@ -94,6 +96,11 @@ func sendMetricBatch(metrics map[string]AgentMetric, serverAddress string, clien
 	}
 	request.Header.Set("Content-Encoding", "gzip")
 	request.Header.Set("Content-Type", "application/json")
+
+	if hashKey != "" {
+		hash := utils.GenSHA256(buf.Bytes(), hashKey)
+		request.Header.Set(utils.HashHeaderName, hex.EncodeToString(hash))
+	}
 
 	resp, err := client.Do(request)
 	if err != nil {

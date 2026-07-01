@@ -27,6 +27,7 @@ func main() {
 		PollInterval:   agentOptions.PollInterval,
 		ReportInterval: agentOptions.ReportInterval,
 		ServerAddr:     serverAddr,
+		HashKey:        agentOptions.HashKey,
 	}
 	a := agent.New(cfg)
 
