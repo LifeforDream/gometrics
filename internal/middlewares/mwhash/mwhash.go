@@ -22,7 +22,7 @@ func newHashWriter(key string, w http.ResponseWriter) *hashWriter {
 func (hw *hashWriter) Write(p []byte) (int, error) {
 	if hw.key != "" {
 		hash := utils.GenSHA256(p, hw.key)
-		hw.Header().Add(utils.HashHeaderName, hex.EncodeToString(hash))
+		hw.Header().Set(utils.HashHeaderName, hex.EncodeToString(hash))
 	}
 	return hw.ResponseWriter.Write(p)
 }

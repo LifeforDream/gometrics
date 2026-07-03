@@ -2,14 +2,20 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"math/rand"
 	"runtime"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
+	"go.uber.org/zap"
+
 	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
-func buildSnapshot(memStats runtime.MemStats, pollCount int) map[string]AgentMetric {
+func buildMemStatsSnapshot(memStats runtime.MemStats, pollCount int) map[string]AgentMetric {
 	return map[string]AgentMetric{
 		"Alloc":         {Type: models.Gauge, Value: float64(memStats.Alloc)},
 		"BuckHashSys":   {Type: models.Gauge, Value: float64(memStats.BuckHashSys)},
@@ -43,7 +49,19 @@ func buildSnapshot(memStats runtime.MemStats, pollCount int) map[string]AgentMet
 	}
 }
 
-func collect(ctx context.Context, interval int, c chan map[string]AgentMetric) {
+func buildPsUtilSnapshot(m *mem.VirtualMemoryStat, cpudata []float64) map[string]AgentMetric {
+	ret := map[string]AgentMetric{
+		"TotalMemory": {Type: models.Gauge, Value: float64(m.Total)},
+		"FreeMemory":  {Type: models.Gauge, Value: float64(m.Free)},
+	}
+	for core, v := range cpudata {
+		k := fmt.Sprintf("CPUutilization%d", core+1)
+		ret[k] = AgentMetric{Type: models.Gauge, Value: v}
+	}
+	return ret
+}
+
+func collectMemStats(ctx context.Context, interval int, c chan map[string]AgentMetric) {
 	var memStats runtime.MemStats
 	pollCount := 0
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
@@ -54,12 +72,56 @@ func collect(ctx context.Context, interval int, c chan map[string]AgentMetric) {
 		case <-ticker.C:
 			runtime.ReadMemStats(&memStats)
 			pollCount++
-			//drain channel
+			c <- buildMemStatsSnapshot(memStats, pollCount)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func collectPsUtil(ctx context.Context, interval int, c chan map[string]AgentMetric, logger *zap.Logger) {
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			m, err := mem.VirtualMemoryWithContext(ctx)
+			if err != nil {
+				logger.Error("error collecting memory metrics", zap.Error(err))
+				continue
+			}
+
+			cpud, err := cpu.PercentWithContext(ctx, 0, true)
+			if err != nil {
+				logger.Error("error collecting cpu metrics", zap.Error(err))
+				continue
+			}
+
+			c <- buildPsUtilSnapshot(m, cpud)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func collect(ctx context.Context, interval int, c chan map[string]AgentMetric, logger *zap.Logger) {
+	colChan := make(chan map[string]AgentMetric, 2) // 2 goroutines = 2 slots
+	metricMap := make(map[string]AgentMetric)
+
+	go collectMemStats(ctx, interval, colChan)
+	go collectPsUtil(ctx, interval, colChan, logger)
+
+	for {
+		select {
+		case tempMap := <-colChan:
+			maps.Copy(metricMap, tempMap)
+			// drain channel to avoid waiting
 			select {
 			case <-c:
 			default:
 			}
-			c <- buildSnapshot(memStats, pollCount)
+			c <- maps.Clone(metricMap)
 		case <-ctx.Done():
 			return
 		}

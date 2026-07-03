@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
@@ -9,11 +10,12 @@ import (
 )
 
 type AgentOptions struct {
-	Address        string `env:"ADDRESS"`
-	Secure         bool
-	PollInterval   int    `env:"POLL_INTERVAL"`
-	ReportInterval int    `env:"REPORT_INTERVAL"`
-	HashKey        string `env:"KEY"`
+	Address            string `env:"ADDRESS"`
+	Secure             bool
+	PollInterval       int    `env:"POLL_INTERVAL"`
+	ReportInterval     int    `env:"REPORT_INTERVAL"`
+	HashKey            string `env:"KEY"`
+	ConcurrentRequests int    `env:"RATE_LIMIT"`
 }
 
 func parseOptions(args ...string) (*AgentOptions, error) {
@@ -25,6 +27,7 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	fs.IntVar(&agentOptions.PollInterval, "p", 2, "poll interval in seconds")
 	fs.IntVar(&agentOptions.ReportInterval, "r", 10, "report interval in seconds")
 	fs.StringVar(&agentOptions.HashKey, "k", "", "hash key")
+	fs.IntVar(&agentOptions.ConcurrentRequests, "l", 1, "max number of concurrent requests to server")
 
 	if args == nil {
 		args = os.Args[1:]
@@ -36,6 +39,10 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	err := env.Parse(&agentOptions)
 	if err != nil {
 		return nil, err
+	}
+
+	if agentOptions.ConcurrentRequests < 1 {
+		return nil, fmt.Errorf("invalid ratelimit number, cannot send metrics %d", agentOptions.ConcurrentRequests)
 	}
 
 	return &agentOptions, nil

@@ -17,29 +17,46 @@ import (
 	"go.uber.org/zap"
 )
 
-func send(ctx context.Context, interval int, c chan map[string]AgentMetric, serverAddress, hashKey string, logger *zap.Logger) {
+func send(ctx context.Context, logger *zap.Logger, interval int, c chan map[string]AgentMetric, serverAddress, hashKey string, concreqs int) {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
 	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		return time.Duration(2*attemptNum+1) * time.Second
 	}
 	retryClient.Logger = nil
-
 	client := retryClient.StandardClient()
+
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
+
+	workChan := make(chan map[string]AgentMetric)
+
+	for range concreqs {
+		go worker(ctx, logger, workChan, serverAddress, hashKey, client)
+	}
 
 	for {
 		select {
 		case <-ticker.C:
 			select {
 			case metrics := <-c:
-				err := sendMetricBatch(metrics, serverAddress, hashKey, client)
-				if err != nil {
-					logger.Error("Error sending metrics batch", zap.Error(err))
-				}
+				workChan <- metrics
 			case <-ctx.Done():
 				return
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func worker(ctx context.Context, logger *zap.Logger, c chan map[string]AgentMetric, serverAddress, hashKey string, client *http.Client) {
+	for {
+		select {
+		case metrics := <-c:
+			err := sendMetricBatch(metrics, serverAddress, hashKey, client)
+			if err != nil {
+				logger.Error("Error sending metrics batch", zap.Error(err))
 			}
 		case <-ctx.Done():
 			return
