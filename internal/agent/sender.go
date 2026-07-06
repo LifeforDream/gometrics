@@ -29,7 +29,7 @@ func send(ctx context.Context, logger *zap.Logger, interval int, c chan map[stri
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
-	workChan := make(chan map[string]AgentMetric)
+	workChan := make(chan map[string]AgentMetric, concreqs)
 
 	for range concreqs {
 		go worker(ctx, logger, workChan, serverAddress, hashKey, client)
