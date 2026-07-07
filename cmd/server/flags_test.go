@@ -22,6 +22,7 @@ func TestParseOptions(t *testing.T) {
 				"-f", "m.json",
 				"-r", "f",
 				"-d", "postgres://u:u@localhost/db",
+				"-k", "a",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
@@ -30,6 +31,7 @@ func TestParseOptions(t *testing.T) {
 				"FILE_STORAGE_PATH": "file.txt",
 				"RESTORE":           "t",
 				"DATABASE_DSN":      "postgres://a:a@localhost/a",
+				"KEY":               "secret",
 			},
 			expected: ServerOptions{
 				RunAddr:       "localhost:8082",
@@ -38,6 +40,7 @@ func TestParseOptions(t *testing.T) {
 				FileStorePath: "file.txt",
 				ToRestore:     true,
 				DatabaseDsn:   "postgres://a:a@localhost/a",
+				HashKey:       "secret",
 			},
 		},
 		{
@@ -51,6 +54,7 @@ func TestParseOptions(t *testing.T) {
 				FileStorePath: "",
 				ToRestore:     true,
 				DatabaseDsn:   "",
+				HashKey:       "",
 			},
 		},
 		{
@@ -64,6 +68,7 @@ func TestParseOptions(t *testing.T) {
 				FileStorePath: "",
 				ToRestore:     true,
 				DatabaseDsn:   "",
+				HashKey:       "",
 			},
 		},
 		{
@@ -77,6 +82,7 @@ func TestParseOptions(t *testing.T) {
 				FileStorePath: "",
 				ToRestore:     true,
 				DatabaseDsn:   "postgres://u:u@localhost/db",
+				HashKey:       "",
 			},
 		},
 		{
@@ -90,6 +96,7 @@ func TestParseOptions(t *testing.T) {
 				FileStorePath: "",
 				ToRestore:     true,
 				DatabaseDsn:   "",
+				HashKey:       "",
 			},
 		},
 	}
@@ -106,6 +113,7 @@ func TestParseOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.StoreInterval, result.StoreInterval)
 			assert.Equal(t, tt.expected.ToRestore, result.ToRestore)
 			assert.Equal(t, tt.expected.DatabaseDsn, result.DatabaseDsn)
+			assert.Equal(t, tt.expected.HashKey, result.HashKey)
 		})
 	}
 }

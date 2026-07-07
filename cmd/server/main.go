@@ -12,6 +12,7 @@ import (
 	"github.com/LifeforDream/gometrics/internal/logging"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
+	"github.com/LifeforDream/gometrics/internal/middlewares/mwhash"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -65,7 +66,7 @@ func main() {
 	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
 		Addr:    serverOptions.RunAddr,
-		Handler: router.MetricsRouter(h, logs.WithLogging(logger), middleware.StripSlashes, mwcompress.Compress(logger)),
+		Handler: router.MetricsRouter(h, logs.WithLogging(logger), mwhash.WithHash(serverOptions.HashKey, logger), middleware.StripSlashes, mwcompress.Compress(logger)),
 	}
 
 	serverErr := make(chan error, 1)

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConstructAddress(t *testing.T) {
@@ -63,36 +64,86 @@ func TestEnvFlagOrder(t *testing.T) {
 		args      []string
 		envParams map[string]string
 		expected  AgentOptions
+		wantErr   bool
 	}{
 		{
 			name:      "all envs overwrite flags",
-			args:      []string{"-a", "localhost:8080", "--secure", "-p", "2", "-r", "10"},
-			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11"},
-			expected:  AgentOptions{"localhost:8082", true, 3, 11},
+			args:      []string{"-a", "localhost:8080", "--secure", "-p", "2", "-r", "10", "-k", "sec", "-l", "1"},
+			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11", "KEY": "secret", "RATE_LIMIT": "2"},
+			expected: AgentOptions{
+				Address:            "localhost:8082",
+				Secure:             true,
+				PollInterval:       3,
+				ReportInterval:     11,
+				HashKey:            "secret",
+				ConcurrentRequests: 2,
+			},
+			wantErr: false,
 		},
 		{
 			name:      "envs overwrite some parameter",
 			args:      []string{"-a", "localhost:8080", "--secure", "-p", "1", "-r", "2"},
 			envParams: map[string]string{"ADDRESS": "localhost:8082"},
-			expected:  AgentOptions{"localhost:8082", true, 1, 2},
+			expected: AgentOptions{
+				Address:            "localhost:8082",
+				Secure:             true,
+				PollInterval:       1,
+				ReportInterval:     2,
+				HashKey:            "",
+				ConcurrentRequests: 1,
+			},
+			wantErr: false,
 		},
 		{
 			name:      "envs don't overwrite when empty",
 			args:      []string{"-a", "localhost:8080", "--secure", "-p", "1", "-r", "2"},
 			envParams: map[string]string{},
-			expected:  AgentOptions{"localhost:8080", true, 1, 2},
+			expected: AgentOptions{
+				Address:            "localhost:8080",
+				Secure:             true,
+				PollInterval:       1,
+				ReportInterval:     2,
+				HashKey:            "",
+				ConcurrentRequests: 1,
+			},
+			wantErr: false,
 		},
 		{
 			name:      "envs write when empty parameter",
 			args:      []string{},
 			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11"},
-			expected:  AgentOptions{"localhost:8082", false, 3, 11},
+			expected: AgentOptions{
+				Address:            "localhost:8082",
+				Secure:             false,
+				PollInterval:       3,
+				ReportInterval:     11,
+				HashKey:            "",
+				ConcurrentRequests: 1,
+			},
+			wantErr: false,
 		},
 		{
 			name:      "envs don't overwrite when empty parameter and env",
 			args:      []string{"-a", "localhost:8080"},
 			envParams: map[string]string{},
-			expected:  AgentOptions{"localhost:8080", false, 2, 10},
+			expected: AgentOptions{
+				Address:            "localhost:8080",
+				Secure:             false,
+				PollInterval:       2,
+				ReportInterval:     10,
+				HashKey:            "",
+				ConcurrentRequests: 1,
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid ratelimit number",
+			args: []string{"-l", "0"},
+			envParams: map[string]string{
+				"RATE_LIMIT": "0",
+			},
+			expected: AgentOptions{},
+			wantErr:  true,
 		},
 	}
 	for _, tt := range tests {
@@ -101,11 +152,18 @@ func TestEnvFlagOrder(t *testing.T) {
 				t.Setenv(envName, envVal)
 			}
 			result, err := parseOptions(tt.args...)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected.Address, result.Address)
-			assert.Equal(t, tt.expected.PollInterval, result.PollInterval)
-			assert.Equal(t, tt.expected.ReportInterval, result.ReportInterval)
-			assert.Equal(t, tt.expected.Secure, result.Secure)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected.Address, result.Address)
+				assert.Equal(t, tt.expected.PollInterval, result.PollInterval)
+				assert.Equal(t, tt.expected.ReportInterval, result.ReportInterval)
+				assert.Equal(t, tt.expected.Secure, result.Secure)
+				assert.Equal(t, tt.expected.HashKey, result.HashKey)
+				assert.Equal(t, tt.expected.ConcurrentRequests, result.ConcurrentRequests)
+			}
 		})
 	}
 }

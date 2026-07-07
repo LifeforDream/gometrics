@@ -24,10 +24,13 @@ func main() {
 	}
 
 	cfg := agent.Config{
-		PollInterval:   agentOptions.PollInterval,
-		ReportInterval: agentOptions.ReportInterval,
-		ServerAddr:     serverAddr,
+		PollInterval:       agentOptions.PollInterval,
+		ReportInterval:     agentOptions.ReportInterval,
+		ServerAddr:         serverAddr,
+		HashKey:            agentOptions.HashKey,
+		ConcurrentRequests: agentOptions.ConcurrentRequests,
 	}
+
 	a := agent.New(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

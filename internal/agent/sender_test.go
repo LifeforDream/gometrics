@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"compress/gzip"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -19,6 +21,7 @@ func TestSendMetricBatch(t *testing.T) {
 		name        string
 		metrics     map[string]AgentMetric
 		wantPayload []models.Metrics
+		hashKey     string
 		wantErr     bool
 		hitsServer  bool
 	}{
@@ -32,6 +35,7 @@ func TestSendMetricBatch(t *testing.T) {
 				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
 				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
 			},
+			hashKey:    "",
 			hitsServer: true,
 		},
 		{
@@ -45,14 +49,37 @@ func TestSendMetricBatch(t *testing.T) {
 			wantErr:    true,
 			hitsServer: false,
 		},
+		{
+			name: "setting hash key sets header",
+			metrics: map[string]AgentMetric{
+				"alloc":     {Type: models.Gauge, Value: 1.25},
+				"pollcount": {Type: models.Counter, Value: 3},
+			},
+			wantPayload: []models.Metrics{
+				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+			},
+			hashKey:    "somekey",
+			hitsServer: true,
+		},
 	}
 	client := &http.Client{}
 	bodyCh := make(chan []byte, 1)
+	hashHeaderCh := make(chan string, 1)
+	rawBodyCh := make(chan []byte, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
-		gr, err := gzip.NewReader(r.Body)
+		hashHeaderCh <- r.Header.Get(utils.HashHeaderName)
+		rawBody, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		rawBodyCh <- rawBody
+
+		gr, err := gzip.NewReader(bytes.NewReader(rawBody))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -70,7 +97,7 @@ func TestSendMetricBatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotErr := sendMetricBatch(tt.metrics, server.URL, client)
+			gotErr := sendMetricBatch(tt.metrics, server.URL, tt.hashKey, client)
 			if tt.wantErr {
 				assert.Error(t, gotErr)
 			} else {
@@ -78,8 +105,17 @@ func TestSendMetricBatch(t *testing.T) {
 			}
 			if tt.hitsServer {
 				var got []models.Metrics
-				require.NoError(t, json.Unmarshal(<-bodyCh, &got))
+				body := <-bodyCh
+				require.NoError(t, json.Unmarshal(body, &got))
 				assert.ElementsMatch(t, tt.wantPayload, got)
+
+				hashHeader := <-hashHeaderCh
+				rawBody := <-rawBodyCh
+				if tt.hashKey != "" {
+					assert.Equal(t, hex.EncodeToString(utils.GenSHA256(rawBody, tt.hashKey)), hashHeader)
+				} else {
+					assert.Empty(t, hashHeader)
+				}
 			}
 		})
 	}
