@@ -15,6 +15,8 @@ type ServerOptions struct {
 	ToRestore     bool   `env:"RESTORE"`
 	DatabaseDsn   string `env:"DATABASE_DSN"`
 	HashKey       string `env:"KEY"`
+	AuditFilePath string `env:"AUDIT_FILE"`
+	AuditURL      string `env:"AUDIT_URL"`
 }
 
 func parseOptions(args ...string) (*ServerOptions, error) {
@@ -28,6 +30,8 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 	fs.BoolVar(&serverOptions.ToRestore, "r", true, "signal to restore metrics values from disk")
 	fs.StringVar(&serverOptions.DatabaseDsn, "d", "", "connection string to connect to database")
 	fs.StringVar(&serverOptions.HashKey, "k", "", "hash key")
+	fs.StringVar(&serverOptions.AuditFilePath, "audit-file", "", "filepath to save audit logs to")
+	fs.StringVar(&serverOptions.AuditURL, "audit-url", "", "url to send audit logs to")
 
 	if args == nil {
 		args = os.Args[1:]

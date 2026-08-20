@@ -7,6 +7,7 @@ import (
 
 	models "github.com/LifeforDream/gometrics/internal/model"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 type MetricRepo interface {
@@ -19,12 +20,17 @@ type MetricRepo interface {
 	Close() error
 }
 
-type MetricService struct {
-	repo MetricRepo
+type Auditor interface {
+	Update([]models.Metrics, string)
 }
 
-func NewMetricService(repo MetricRepo) *MetricService {
-	return &MetricService{repo: repo}
+type MetricService struct {
+	repo    MetricRepo
+	auditor Auditor
+}
+
+func NewMetricService(repo MetricRepo, auditor Auditor) *MetricService {
+	return &MetricService{repo: repo, auditor: auditor}
 }
 
 func (s *MetricService) Ping(ctx context.Context) error {
@@ -95,11 +101,18 @@ func (s *MetricService) UpdateGaugeByName(ctx context.Context, name string, valu
 		Value: &value,
 	}
 	err := s.repo.SetGauge(ctx, metric)
+	if err == nil {
+		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
+	}
 	return err
 }
 
 func (s *MetricService) UpdateGauge(ctx context.Context, metric models.Metrics) error {
-	return s.repo.SetGauge(ctx, metric)
+	err := s.repo.SetGauge(ctx, metric)
+	if err == nil {
+		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
+	}
+	return err
 }
 
 func (s *MetricService) UpdateCounterByName(ctx context.Context, name string, delta int64) error {
@@ -109,15 +122,26 @@ func (s *MetricService) UpdateCounterByName(ctx context.Context, name string, de
 		Delta: &delta,
 	}
 	err := s.repo.UpdateCounter(ctx, metric)
+	if err == nil {
+		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
+	}
 	return err
 }
 
 func (s *MetricService) UpdateCounter(ctx context.Context, metric models.Metrics) error {
-	return s.repo.UpdateCounter(ctx, metric)
+	err := s.repo.UpdateCounter(ctx, metric)
+	if err == nil {
+		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
+	}
+	return err
 }
 
 func (s *MetricService) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
-	return s.repo.UpdateMetrics(ctx, metrics)
+	err := s.repo.UpdateMetrics(ctx, metrics)
+	if err == nil {
+		s.auditor.Update(metrics, utils.ClientIP(ctx))
+	}
+	return err
 }
 
 func (s *MetricService) ValidateMetric(metric models.Metrics) error {

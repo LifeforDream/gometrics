@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LifeforDream/gometrics/internal/audit"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -68,7 +69,7 @@ func TestGetMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// arrange
 			r := chi.NewRouter()
-			service := service.NewMetricService(repository.NewMemStorage())
+			service := service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
 
 			h := NewHandler(service, logger)
 			r.Get("/", h.GetMetrics)
@@ -140,7 +141,7 @@ func TestGetMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// arrange
 			r := chi.NewRouter()
-			service := service.NewMetricService(repository.NewMemStorage())
+			service := service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
 			service.UpdateCounterByName(t.Context(), "pollcount", 2)
 			service.UpdateGaugeByName(t.Context(), "alloc", 1.25)
 
@@ -256,7 +257,7 @@ func TestUpdateMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			//arrange
 			r := chi.NewRouter()
-			service := service.NewMetricService(repository.NewMemStorage())
+			service := service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
 
 			h := NewHandler(service, logger)
 			r.Post("/update/{type}/{name}/{value}", h.UpdateMetricValue)
@@ -309,7 +310,7 @@ func (s *stubService) Ping(ctx context.Context) error {
 
 func TestGetMetricJson(t *testing.T) {
 	logger := zap.NewNop()
-	defaultservice := service.NewMetricService(repository.NewMemStorage())
+	defaultservice := service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
 	defaultservice.UpdateCounter(t.Context(), models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)})
 	defaultservice.UpdateGauge(t.Context(), models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)})
 
@@ -503,7 +504,7 @@ func TestUpdateMetricJson(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := chi.NewRouter()
-			service := service.NewMetricService(repository.NewMemStorage())
+			service := service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
 			h := NewHandler(service, logger)
 			r.Post("/update", h.UpdateMetric)
 			ts := httptest.NewServer(r)
@@ -584,7 +585,7 @@ func TestUpdateMetricsBatch(t *testing.T) {
 		},
 		{
 			name: "500 on service error",
-			svc:  &stubService{MetricService: service.NewMetricService(repository.NewMemStorage()), wantErr: errors.New("db error")},
+			svc:  &stubService{MetricService: service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{}), wantErr: errors.New("db error")},
 			input: inputParams{
 				contentType: "application/json",
 				rawBody:     `[{"id":"alloc","type":"gauge","value":1.25}]`,
@@ -597,7 +598,7 @@ func TestUpdateMetricsBatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := tt.svc
 			if svc == nil {
-				svc = service.NewMetricService(repository.NewMemStorage())
+				svc = service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
 			}
 			r := chi.NewRouter()
 			h := NewHandler(svc, logger)
