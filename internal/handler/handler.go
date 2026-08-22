@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -154,8 +155,13 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	var req models.Metrics
 
 	h.logger.Debug("decoding request")
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Debug("cannot read request body", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -208,8 +214,13 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	var req models.Metrics
 
 	h.logger.Debug("decoding request")
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Debug("cannot read request body", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -255,8 +266,13 @@ func (h *Handler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 	var servErr error
 
 	h.logger.Debug("decoding request")
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Debug("cannot read request body", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		h.logger.Debug("cannot decode request JSON body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
