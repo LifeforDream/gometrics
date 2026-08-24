@@ -10,12 +10,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// HTTPAuditSender — реализация Sender, отправляющая каждое событие аудита
+// отдельным HTTP POST-запросом с JSON-телом по адресу address.
 type HTTPAuditSender struct {
 	address string
 	logger  *zap.Logger
 	c       chan Event
 }
 
+// NewHTTPAuditSender создаёт HTTPAuditSender для указанного адреса addr,
+// провалидировав его как URL.
 func NewHTTPAuditSender(addr string, logger *zap.Logger) (*HTTPAuditSender, error) {
 	_, err := url.Parse(addr)
 	if err != nil {

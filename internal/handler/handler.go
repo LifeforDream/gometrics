@@ -1,3 +1,5 @@
+// Package handler реализует HTTP-слой: парсинг path-параметров и тела
+// запроса, валидация типов и маппинг ошибок сервисного слоя в HTTP-статусы.
 package handler
 
 import (
@@ -25,6 +27,8 @@ const pageHtml = `<html>
 </html>
 `
 
+// MetricService — контракт сервисного слоя, ожидаемый Handler; реализуется
+// service.MetricService.
 type MetricService interface {
 	GetMetrics(ctx context.Context) ([]string, error)
 	GetMetricValue(ctx context.Context, metricType string, name string) (string, error)
@@ -36,15 +40,19 @@ type MetricService interface {
 	Ping(ctx context.Context) error
 }
 
+// Handler объединяет HTTP-хендлеры сервера метрик поверх MetricService.
 type Handler struct {
 	service MetricService
 	logger  *zap.Logger
 }
 
+// NewHandler создаёт Handler поверх переданных сервиса и логгера.
 func NewHandler(service MetricService, logger *zap.Logger) *Handler {
 	return &Handler{service: service, logger: logger}
 }
 
+// Ping обрабатывает GET /ping и проверяет доступность хранилища через
+// MetricService.Ping.
 func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Ping(r.Context()); err != nil {
 		h.logger.Error("Connection to database can't be established", zap.Error(err))
@@ -54,6 +62,8 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// GetMetrics обрабатывает GET / и отдаёт HTML-страницу со списком всех
+// известных метрик.
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	var metricslist []string
 	metrics, err := h.service.GetMetrics(r.Context())
@@ -76,6 +86,9 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(page))
 }
 
+// GetMetricValue обрабатывает GET /value/{type}/{name} и возвращает
+// значение метрики текстом. Отвечает 404, если метрика не найдена, и 400,
+// если её фактический тип не совпадает с {type}.
 func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	metricType := strings.ToLower(chi.URLParam(r, "type"))
 	metricName := strings.ToLower(chi.URLParam(r, "name"))
@@ -97,6 +110,9 @@ func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(value))
 }
 
+// UpdateMetricValue обрабатывает POST /update/{type}/{name}/{value}:
+// парсит значение из path-параметра согласно {type} (gauge — float64,
+// counter — int64) и обновляет метрику через сервисный слой.
 func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 	var servErr error
 
@@ -147,6 +163,10 @@ func (h *Handler) UpdateMetricValue(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// GetMetric обрабатывает POST /value: принимает JSON-тело models.Metrics
+// с заполненными ID и MType и возвращает метрику целиком в JSON.
+// Отвечает 404, если метрика не найдена, и 400 при несовпадении типа
+// или некорректном/пустом теле запроса.
 func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
@@ -204,6 +224,9 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("sending HTTP 200 response")
 }
 
+// UpdateMetric обрабатывает POST /update: принимает JSON-тело models.Metrics
+// и обновляет одну метрику через сервисный слой. Отвечает 400 при
+// невалидном теле/метрике или несовпадении типа с уже сохранённым.
 func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))
@@ -256,6 +279,9 @@ func (h *Handler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	h.logger.Debug("sending HTTP 200 response")
 }
 
+// UpdateMetrics обрабатывает POST /updates: принимает JSON-массив
+// models.Metrics и обновляет их одним батчем через сервисный слой.
+// Валидирует каждую метрику до отправки батча в сервис.
 func (h *Handler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 		h.logger.Debug("Invalid content-type", zap.String("content-type", ct))

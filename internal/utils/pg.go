@@ -12,6 +12,10 @@ import (
 
 var retryDelays = []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
 
+// WithRetryPG выполняет op и, если ошибка распознана IsRetriablePgError
+// как транзиентная, повторяет вызов с задержками из retryDelays
+// (1с, 3с, 5с). Прерывается раньше по ctx.Done(). Возвращает обёрнутую
+// ошибку последней неудачной попытки.
 func WithRetryPG(ctx context.Context, op func() error) error {
 	err := op()
 	for _, d := range retryDelays {
@@ -31,6 +35,10 @@ func WithRetryPG(ctx context.Context, op func() error) error {
 	return nil
 }
 
+// IsRetriablePgError определяет, стоит ли повторять операцию после err:
+// true для ошибок соединения (класс 08), отката транзакции/сериализации/
+// дедлока (класс 40) и "cannot connect now" (57P03); для прочих pgconn.PgError
+// и любых остальных ошибок — false.
 func IsRetriablePgError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {

@@ -1,3 +1,4 @@
+// Package logs содержит chi-мидлвар, логирующий каждый обработанный запрос.
 package logs
 
 import (
@@ -30,6 +31,10 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
+// WithLogging возвращает chi-мидлвар, логирующий URI, метод, длительность
+// запроса, статус ответа и размер тела на уровне Debug — уровень выбран
+// намеренно, чтобы не засорять вывод автотестов. Статус 0 (когда хендлер
+// вызывает только Write без явного WriteHeader) нормализуется до 200.
 func WithLogging(log *zap.Logger) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

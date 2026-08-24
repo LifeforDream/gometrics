@@ -20,3 +20,6 @@ loadtest-dur:
 
 profile-heap:
 	go tool pprof -http=":9090" -seconds=30 http://localhost:8080/debug/pprof/heap
+
+gen-swagger:
+	swag init --output ./swagger/

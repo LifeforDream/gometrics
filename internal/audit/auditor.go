@@ -1,3 +1,6 @@
+// Package audit реализует Observer-паттерн для аудита обновлений метрик:
+// Auditor — субъект, рассылающий события подписчикам (Sender), реализованным
+// как HTTPAuditSender и FileAuditSender.
 package audit
 
 import (
@@ -9,6 +12,10 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
+// Sender — подписчик (Observer) в паттерне «Наблюдатель»: получает канал
+// событий через setChan и обрабатывает их в собственной горутине worker.
+// getID различает подписчиков — Auditor.RegisterSub допускает не больше
+// одного Sender с одинаковым id.
 type Sender interface {
 	getID() string
 	setChan(chan Event)
@@ -32,6 +39,7 @@ type Auditor struct {
 	logger         *zap.Logger
 }
 
+// NewAuditor создаёт Auditor и запускает его горутину-диспетчер dispatch.
 func NewAuditor(logger *zap.Logger) *Auditor {
 	a := &Auditor{logger: logger}
 	a.input = make(chan Event, inputBufferSize)
@@ -40,6 +48,9 @@ func NewAuditor(logger *zap.Logger) *Auditor {
 	return a
 }
 
+// RegisterSub подписывает sub на события аудита и запускает его worker
+// в отдельной горутине. Повторная регистрация подписчика с тем же
+// sub.getID() игнорируется.
 func (a *Auditor) RegisterSub(sub Sender) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -84,6 +95,10 @@ func (a *Auditor) subsSnapshot() []chan Event {
 	return chans
 }
 
+// Update публикует событие аудита с именами обновлённых metrics и
+// ipAddress клиента. Если подписчиков нет или входной буфер заполнен,
+// событие отбрасывается без блокировки вызывающего кода (см.
+// inputBufferSize).
 func (a *Auditor) Update(metrics []models.Metrics, ipAddress string) {
 	a.mu.Lock()
 	empty := len(a.subChan) == 0
@@ -113,6 +128,8 @@ func (a *Auditor) Update(metrics []models.Metrics, ipAddress string) {
 	}
 }
 
+// Close закрывает входной канал и блокируется до завершения горутины
+// dispatch, которая, в свою очередь, закрывает каналы всех подписчиков.
 func (a *Auditor) Close() {
 	close(a.input)
 	<-a.dispatcherDone

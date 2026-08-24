@@ -7,12 +7,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// FileAuditSender — реализация Sender, дописывающая каждое событие аудита
+// JSON-строкой в конец файла.
 type FileAuditSender struct {
 	file   *os.File
 	logger *zap.Logger
 	c      chan Event
 }
 
+// NewFileAuditSender открывает (или создаёт) файл fn на дозапись и
+// возвращает готовый к работе FileAuditSender.
 func NewFileAuditSender(fn string, logger *zap.Logger) (*FileAuditSender, error) {
 	file, err := os.OpenFile(fn, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
