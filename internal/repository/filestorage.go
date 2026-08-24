@@ -8,8 +8,9 @@ import (
 	"os"
 	"time"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
 	"go.uber.org/zap"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
 type metriclist map[string]models.Metrics

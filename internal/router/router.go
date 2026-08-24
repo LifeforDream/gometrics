@@ -3,8 +3,9 @@ package router
 import (
 	"net/http"
 
-	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/LifeforDream/gometrics/internal/handler"
 )
 
 func MetricsRouter(h *handler.Handler, middlewares ...func(http.Handler) http.Handler) chi.Router {

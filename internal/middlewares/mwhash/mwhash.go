@@ -6,8 +6,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"go.uber.org/zap"
+
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 type hashWriter struct {

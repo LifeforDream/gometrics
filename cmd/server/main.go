@@ -8,6 +8,11 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
 	"github.com/LifeforDream/gometrics/internal/audit"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
@@ -18,10 +23,6 @@ import (
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
-	"github.com/go-chi/chi/v5/middleware"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 )
 
 func main() {

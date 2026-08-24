@@ -5,12 +5,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/LifeforDream/gometrics/internal/audit"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	repository "github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/utils"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // fakeAuditor is a test double for the service.Auditor interface: it

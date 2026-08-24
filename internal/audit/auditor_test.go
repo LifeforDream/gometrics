@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
 // fakeSender is a test double implementing the unexported Sender interface

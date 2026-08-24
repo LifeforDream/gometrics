@@ -10,10 +10,11 @@ import (
 	"strconv"
 	"strings"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
-	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
+	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 )
 
 const pageHtml = `<html>

@@ -10,10 +10,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 func TestSendMetricBatch(t *testing.T) {

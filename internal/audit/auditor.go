@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
 	"go.uber.org/zap"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
 type Sender interface {

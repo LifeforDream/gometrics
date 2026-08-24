@@ -5,8 +5,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/LifeforDream/gometrics/internal/compress"
 	"go.uber.org/zap"
+
+	"github.com/LifeforDream/gometrics/internal/compress"
 )
 
 var encodableTypes = []string{"application/json", "text/html"}

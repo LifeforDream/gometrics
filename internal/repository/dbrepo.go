@@ -7,9 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
-	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -17,6 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
+	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 type PgxIface interface {

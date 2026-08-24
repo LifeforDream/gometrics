@@ -9,10 +9,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 func TestWithHash(t *testing.T) {
