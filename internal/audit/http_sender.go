@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 )
 
@@ -37,9 +38,15 @@ func (hs *HTTPAuditSender) getID() string {
 }
 
 func (hs *HTTPAuditSender) worker() {
-	client := &http.Client{
-		Timeout: 3 * time.Second,
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.Backoff = func(_, _ time.Duration, attemptNum int, _ *http.Response) time.Duration {
+		return time.Duration(2*attemptNum+1) * time.Second
 	}
+	retryClient.Logger = nil
+	retryClient.HTTPClient.Timeout = 3 * time.Second
+	retryClient.ErrorHandler = retryablehttp.PassthroughErrorHandler
+	client := retryClient.StandardClient()
 	for event := range hs.c {
 		hs.sendUpdate(event, client)
 	}

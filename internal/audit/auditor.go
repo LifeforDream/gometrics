@@ -5,6 +5,7 @@ package audit
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -36,12 +37,13 @@ type Auditor struct {
 	subChan        map[string]chan Event
 	input          chan Event
 	dispatcherDone chan struct{}
-	logger         *zap.Logger
+	logger         atomic.Pointer[zap.Logger]
 }
 
 // NewAuditor создаёт Auditor и запускает его горутину-диспетчер dispatch.
 func NewAuditor(logger *zap.Logger) *Auditor {
-	a := &Auditor{logger: logger}
+	a := &Auditor{}
+	a.logger.Store(logger)
 	a.input = make(chan Event, inputBufferSize)
 	a.dispatcherDone = make(chan struct{})
 	go a.dispatch()
@@ -100,6 +102,8 @@ func (a *Auditor) subsSnapshot() []chan Event {
 // событие отбрасывается без блокировки вызывающего кода (см.
 // inputBufferSize).
 func (a *Auditor) Update(metrics []models.Metrics, ipAddress string) {
+	logger := a.logger.Load()
+
 	a.mu.Lock()
 	empty := len(a.subChan) == 0
 	in := a.input
@@ -122,8 +126,8 @@ func (a *Auditor) Update(metrics []models.Metrics, ipAddress string) {
 	select {
 	case in <- ae:
 	default:
-		if a.logger != nil {
-			a.logger.Warn("audit event dropped: input buffer full", zap.Int("metrics_count", len(ae.Metrics)))
+		if logger != nil {
+			logger.Warn("audit event dropped: input buffer full", zap.Int("metrics_count", len(ae.Metrics)))
 		}
 	}
 }

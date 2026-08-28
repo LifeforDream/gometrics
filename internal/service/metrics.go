@@ -45,6 +45,14 @@ func NewMetricService(repo MetricRepo, auditor Auditor) *MetricService {
 	return &MetricService{repo: repo, auditor: auditor}
 }
 
+func (s *MetricService) withAudit(ctx context.Context, f func(context.Context) ([]models.Metrics, error)) error {
+	metrics, err := f(ctx)
+	if err == nil {
+		s.auditor.Update(metrics, utils.ClientIP(ctx))
+	}
+	return err
+}
+
 // Ping проверяет доступность репозитория.
 func (s *MetricService) Ping(ctx context.Context) error {
 	return s.repo.Ping(ctx)
@@ -115,63 +123,60 @@ func (s *MetricService) GetMetric(ctx context.Context, metricType, name string) 
 }
 
 // UpdateGaugeByName собирает метрику типа gauge из имени и значения и
-// сохраняет её, заменяя предыдущее значение.
+// сохраняет её, заменяя предыдущее значение и отправляя в auditor.
 func (s *MetricService) UpdateGaugeByName(ctx context.Context, name string, value float64) error {
-	metric := models.Metrics{
-		ID:    name,
-		MType: models.Gauge,
-		Value: &value,
-	}
-	err := s.repo.SetGauge(ctx, metric)
-	if err == nil {
-		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
-	}
-	return err
+	return s.withAudit(ctx, func(context.Context) ([]models.Metrics, error) {
+		metric := models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &value,
+		}
+		err := s.repo.SetGauge(ctx, metric)
+		return []models.Metrics{metric}, err
+	})
+
 }
 
-// UpdateGauge сохраняет метрику типа gauge, заменяя предыдущее значение,
-// и уведомляет auditor при успехе.
+// UpdateGauge сохраняет метрику типа gauge, заменяя предыдущее значение
+// и отправляя уведомление в auditor.
 func (s *MetricService) UpdateGauge(ctx context.Context, metric models.Metrics) error {
-	err := s.repo.SetGauge(ctx, metric)
-	if err == nil {
-		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
-	}
-	return err
+	return s.withAudit(ctx, func(context.Context) ([]models.Metrics, error) {
+		err := s.repo.SetGauge(ctx, metric)
+		return []models.Metrics{metric}, err
+	})
+
 }
 
 // UpdateCounterByName собирает метрику типа counter из имени и дельты и
 // накапливает её поверх ранее сохранённого значения.
 func (s *MetricService) UpdateCounterByName(ctx context.Context, name string, delta int64) error {
-	metric := models.Metrics{
-		ID:    name,
-		MType: models.Counter,
-		Delta: &delta,
-	}
-	err := s.repo.UpdateCounter(ctx, metric)
-	if err == nil {
-		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
-	}
-	return err
+	return s.withAudit(ctx, func(context.Context) ([]models.Metrics, error) {
+		metric := models.Metrics{
+			ID:    name,
+			MType: models.Counter,
+			Delta: &delta,
+		}
+		err := s.repo.UpdateCounter(ctx, metric)
+		return []models.Metrics{metric}, err
+	})
 }
 
 // UpdateCounter накапливает метрику типа counter поверх ранее сохранённого
-// значения и уведомляет auditor при успехе.
+// значения, после чего отправляет в auditor.
 func (s *MetricService) UpdateCounter(ctx context.Context, metric models.Metrics) error {
-	err := s.repo.UpdateCounter(ctx, metric)
-	if err == nil {
-		s.auditor.Update([]models.Metrics{metric}, utils.ClientIP(ctx))
-	}
-	return err
+	return s.withAudit(ctx, func(context.Context) ([]models.Metrics, error) {
+		err := s.repo.UpdateCounter(ctx, metric)
+		return []models.Metrics{metric}, err
+	})
 }
 
 // UpdateMetrics атомарно применяет батч метрик (gauge заменяют значение,
-// counter накапливают его) и уведомляет auditor единым событием при успехе.
+// counter накапливают его).
 func (s *MetricService) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
-	err := s.repo.UpdateMetrics(ctx, metrics)
-	if err == nil {
-		s.auditor.Update(metrics, utils.ClientIP(ctx))
-	}
-	return err
+	return s.withAudit(ctx, func(context.Context) ([]models.Metrics, error) {
+		err := s.repo.UpdateMetrics(ctx, metrics)
+		return metrics, err
+	})
 }
 
 // ValidateMetric проверяет, что тип метрики известен и соответствующее

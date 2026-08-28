@@ -38,10 +38,25 @@ func TestWithClientIP(t *testing.T) {
 			want:       "::1",
 		},
 		{
-			name:       "X-Real-IP loses to RemoteAddr",
+			name:       "X-Real-IP wins over RemoteAddr",
 			remoteAddr: "10.0.0.1:54321",
 			headers:    map[string]string{realIPHeader: "192.168.0.42"},
-			want:       "10.0.0.1",
+			want:       "192.168.0.42",
+		},
+		{
+			name:       "X-Forwarded-For wins over RemoteAddr when X-Real-IP absent",
+			remoteAddr: "10.0.0.1:54321",
+			headers:    map[string]string{forwardedHeader: "203.0.113.9, 10.0.0.1"},
+			want:       "203.0.113.9",
+		},
+		{
+			name:       "X-Real-IP wins over X-Forwarded-For",
+			remoteAddr: "10.0.0.1:54321",
+			headers: map[string]string{
+				realIPHeader:    "192.168.0.42",
+				forwardedHeader: "203.0.113.9, 10.0.0.1",
+			},
+			want: "192.168.0.42",
 		},
 		{
 			name:       "empty headers fall back to RemoteAddr",
