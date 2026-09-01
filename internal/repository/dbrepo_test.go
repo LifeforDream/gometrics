@@ -6,12 +6,13 @@ import (
 	"regexp"
 	"testing"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
-	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/pashagolub/pgxmock/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
+	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 func TestDbGetAllSlice(t *testing.T) {

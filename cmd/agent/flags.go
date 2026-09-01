@@ -9,13 +9,20 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// AgentOptions — конфигурация агента, разбираемая parseOptions: сначала
+// флаги командной строки, затем переменные окружения поверх них (env имеет
+// приоритет).
 type AgentOptions struct {
-	Address            string `env:"ADDRESS"`
-	Secure             bool
-	PollInterval       int    `env:"POLL_INTERVAL"`
-	ReportInterval     int    `env:"REPORT_INTERVAL"`
-	HashKey            string `env:"KEY"`
-	ConcurrentRequests int    `env:"RATE_LIMIT"`
+	Address string `env:"ADDRESS"` // адрес сервера; флаг -a, по умолчанию "localhost:8080"
+	Secure  bool   // флаг -secure: использовать https вместо http, если в Address не указана схема
+	// PollInterval — интервал опроса метрик в секундах; флаг -p, по умолчанию 2
+	PollInterval int `env:"POLL_INTERVAL"`
+	// ReportInterval — интервал отправки метрик на сервер в секундах; флаг -r, по умолчанию 10
+	ReportInterval int `env:"REPORT_INTERVAL"`
+	// HashKey — ключ HMAC-подписи тела запроса; флаг -k, по умолчанию ""
+	HashKey string `env:"KEY"`
+	// ConcurrentRequests — максимум одновременных запросов к серверу; флаг -l, по умолчанию 1
+	ConcurrentRequests int `env:"RATE_LIMIT"`
 }
 
 func parseOptions(args ...string) (*AgentOptions, error) {

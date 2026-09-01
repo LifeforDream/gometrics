@@ -1,3 +1,5 @@
+// Package mwhash содержит chi-мидлвар для проверки и простановки
+// HMAC-SHA256-подписи тела HTTP-запроса/ответа.
 package mwhash
 
 import (
@@ -6,8 +8,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"go.uber.org/zap"
+
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 type hashWriter struct {
@@ -46,6 +49,11 @@ func (hw *hashWriter) flush() {
 	_, _ = hw.ResponseWriter.Write(body)
 }
 
+// WithHash возвращает chi-мидлвар: если key задан и во входящем запросе
+// присутствует заголовок utils.HashHeaderName, проверяет HMAC тела запроса
+// и отвечает 400 при несовпадении. Если key пуст или заголовок отсутствует,
+// проверка пропускается. В ответ всегда добавляется заголовок
+// utils.HashHeaderName с подписью тела ответа (при заданном key).
 func WithHash(key string, log *zap.Logger) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

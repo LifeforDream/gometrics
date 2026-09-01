@@ -7,9 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	models "github.com/LifeforDream/gometrics/internal/model"
-	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
-	"github.com/LifeforDream/gometrics/internal/utils"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -17,8 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
+
+	models "github.com/LifeforDream/gometrics/internal/model"
+	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
+// PgxIface — абстракция над *pgxpool.Pool, нужная ради тестируемости
+// DbStorage через go-sqlmock без поднятия реальной базы.
 type PgxIface interface {
 	Ping(ctx context.Context) error
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -30,11 +33,18 @@ type PgxIface interface {
 //go:embed migrations
 var migrationsFS embed.FS
 
+// DbStorage хранит метрики в PostgreSQL. SetGauge и UpdateCounter
+// используют атомарный UPSERT (INSERT … ON CONFLICT … DO UPDATE … WHERE
+// mtype = EXCLUDED.mtype); при несовпадении типа возвращают
+// myErrors.InvalidMetricType. UpdateMetrics выполняет весь батч в одной
+// транзакции с откатом через defer при любой ошибке.
 type DbStorage struct {
 	pool   PgxIface
 	logger *zap.Logger
 }
 
+// NewDbStorage создаёт DbStorage поверх пула соединений pool и накатывает
+// схему БД через встроенные миграции (см. performMigrate).
 func NewDbStorage(ctx context.Context, pool PgxIface, logger *zap.Logger) (*DbStorage, error) {
 	store := &DbStorage{pool: pool, logger: logger}
 	return store, store.performMigrate(ctx)
@@ -86,10 +96,13 @@ func (ds *DbStorage) performMigrate(ctx context.Context) error {
 	})
 }
 
+// Ping проверяет доступность соединения с базой данных.
 func (ds *DbStorage) Ping(ctx context.Context) error {
 	return ds.pool.Ping(ctx)
 }
 
+// GetAllSlice возвращает все метрики из таблицы metrics, с ретраями через
+// utils.WithRetryPG.
 func (ds *DbStorage) GetAllSlice(ctx context.Context) ([]models.Metrics, error) {
 	metrics := make([]models.Metrics, 0)
 	err := utils.WithRetryPG(ctx, func() error {
@@ -118,6 +131,8 @@ func (ds *DbStorage) GetAllSlice(ctx context.Context) ([]models.Metrics, error) 
 	return metrics, err
 }
 
+// GetMetric возвращает метрику по имени, с ретраями через utils.WithRetryPG.
+// Возвращает myErrors.MetricNotFound, если строка с таким id отсутствует.
 func (ds *DbStorage) GetMetric(ctx context.Context, name string) (models.Metrics, error) {
 	var metric models.Metrics
 	err := utils.WithRetryPG(ctx, func() error {
@@ -134,6 +149,8 @@ func (ds *DbStorage) GetMetric(ctx context.Context, name string) (models.Metrics
 	return metric, err
 }
 
+// SetGauge атомарно заменяет хранимое значение метрики типа gauge внутри
+// собственной транзакции (см. setGauge), с ретраями через utils.WithRetryPG.
 func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
 	return utils.WithRetryPG(ctx, func() error {
 		tx, err := ds.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -178,6 +195,9 @@ func (ds *DbStorage) setGauge(ctx context.Context, tx pgx.Tx, metric models.Metr
 	return nil
 }
 
+// UpdateCounter атомарно прибавляет Delta метрики к ранее сохранённому
+// значению метрики типа counter внутри собственной транзакции
+// (см. updateCounter), с ретраями через utils.WithRetryPG.
 func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
 	return utils.WithRetryPG(ctx, func() error {
 		tx, err := ds.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -222,6 +242,9 @@ func (ds *DbStorage) updateCounter(ctx context.Context, tx pgx.Tx, metric models
 	return nil
 }
 
+// UpdateMetrics выполняет весь батч апдейтов gauge/counter в одной
+// транзакции через pgx.Batch, с откатом через defer при любой ошибке
+// и ретраями всей операции через utils.WithRetryPG.
 func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
 	return utils.WithRetryPG(ctx, func() error {
 		tx, err := ds.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -266,6 +289,7 @@ func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics
 	})
 }
 
+// Close закрывает пул соединений с базой данных.
 func (ds *DbStorage) Close() error {
 	ds.pool.Close()
 	return nil

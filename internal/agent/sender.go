@@ -10,11 +10,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
+	"go.uber.org/zap"
+
 	"github.com/LifeforDream/gometrics/internal/compress"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/utils"
-	"github.com/hashicorp/go-retryablehttp"
-	"go.uber.org/zap"
 )
 
 func send(ctx context.Context, logger *zap.Logger, interval int, c chan map[string]AgentMetric, serverAddress, hashKey string, concreqs int) {

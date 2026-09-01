@@ -1,12 +1,20 @@
+// Package router собирает chi.Router для сервера метрик поверх
+// internal/handler.
 package router
 
 import (
 	"net/http"
 
-	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/LifeforDream/gometrics/internal/handler"
 )
 
+// MetricsRouter регистрирует все маршруты сервера метрик поверх h и
+// подключает переданные middlewares в порядке перечисления (первый
+// оборачивает запрос первым). Сам роутер не зависит от конкретных
+// мидлваров — их подключение остаётся на стороне вызывающего кода
+// (cmd/server/main.go).
 func MetricsRouter(h *handler.Handler, middlewares ...func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 

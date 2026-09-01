@@ -1,14 +1,43 @@
 package service
 
 import (
+	"context"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/LifeforDream/gometrics/internal/audit"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	repository "github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/utils"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
+
+// fakeAuditor is a test double for the service.Auditor interface: it
+// records every call so tests can assert whether (and with what) the
+// observer pattern's notification was fired.
+type fakeAuditor struct {
+	mu    sync.Mutex
+	calls []auditCall
+}
+
+type auditCall struct {
+	metrics []models.Metrics
+	ip      string
+}
+
+func (f *fakeAuditor) Update(metrics []models.Metrics, ip string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, auditCall{metrics: metrics, ip: ip})
+}
+
+func (f *fakeAuditor) Calls() []auditCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]auditCall(nil), f.calls...)
+}
 
 func TestGetMetrics(t *testing.T) {
 	tests := []struct {
@@ -37,7 +66,7 @@ func TestGetMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewMetricService(tt.repo)
+			s := NewMetricService(tt.repo, &audit.Auditor{})
 			for _, metric := range tt.input {
 				if metric.MType == "counter" {
 					tt.repo.UpdateCounter(t.Context(), metric)
@@ -129,7 +158,7 @@ func TestGetMetricValue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewMetricService(tt.repo)
+			s := NewMetricService(tt.repo, &audit.Auditor{})
 			for _, metric := range tt.setUp {
 				if metric.MType == "counter" {
 					tt.repo.UpdateCounter(t.Context(), metric)
@@ -174,7 +203,7 @@ func TestUpdateGauge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := repository.NewMemStorage()
-			s := NewMetricService(repo)
+			s := NewMetricService(repo, &audit.Auditor{})
 			for _, val := range tt.values {
 				s.UpdateGaugeByName(t.Context(), tt.mname, val)
 			}
@@ -210,7 +239,7 @@ func TestUpdateCounter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := repository.NewMemStorage()
-			s := NewMetricService(repo)
+			s := NewMetricService(repo, &audit.Auditor{})
 			for _, val := range tt.values {
 				s.UpdateCounterByName(t.Context(), tt.mname, val)
 			}
@@ -268,7 +297,7 @@ func TestUpdateMetrics(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := repository.NewMemStorage()
-			s := NewMetricService(repo)
+			s := NewMetricService(repo, &audit.Auditor{})
 			for _, m := range tt.setUp {
 				if m.MType == models.Counter {
 					repo.UpdateCounter(t.Context(), m)
@@ -293,7 +322,7 @@ func TestUpdateMetrics(t *testing.T) {
 
 func TestMetricConflicts(t *testing.T) {
 	repo := repository.NewMemStorage()
-	s := NewMetricService(repo)
+	s := NewMetricService(repo, &audit.Auditor{})
 
 	// Create a gauge metric
 	err := s.UpdateGaugeByName(t.Context(), "Alloc", 23.5)
@@ -363,7 +392,7 @@ func TestGetMetric(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewMetricService(tt.repo)
+			s := NewMetricService(tt.repo, &audit.Auditor{})
 			for _, metric := range tt.setUp {
 				if metric.MType == "counter" {
 					tt.repo.UpdateCounter(t.Context(), metric)
@@ -380,4 +409,137 @@ func TestGetMetric(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuditNotifiedOnSuccessfulUpdates(t *testing.T) {
+	ctx := utils.WithClientIP(t.Context(), "192.168.0.42")
+
+	tests := []struct {
+		name    string
+		call    func(s *MetricService) error
+		wantIDs []string
+	}{
+		{
+			name: "UpdateGaugeByName",
+			call: func(s *MetricService) error {
+				return s.UpdateGaugeByName(ctx, "Alloc", 1.25)
+			},
+			wantIDs: []string{"Alloc"},
+		},
+		{
+			name: "UpdateCounterByName",
+			call: func(s *MetricService) error {
+				return s.UpdateCounterByName(ctx, "PollCount", 1)
+			},
+			wantIDs: []string{"PollCount"},
+		},
+		{
+			name: "UpdateGauge",
+			call: func(s *MetricService) error {
+				return s.UpdateGauge(ctx, models.Metrics{ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)})
+			},
+			wantIDs: []string{"Alloc"},
+		},
+		{
+			name: "UpdateCounter",
+			call: func(s *MetricService) error {
+				return s.UpdateCounter(ctx, models.Metrics{ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(1)})
+			},
+			wantIDs: []string{"PollCount"},
+		},
+		{
+			name: "UpdateMetrics batch reports all metrics in one call",
+			call: func(s *MetricService) error {
+				return s.UpdateMetrics(ctx, []models.Metrics{
+					{ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
+					{ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(1)},
+				})
+			},
+			wantIDs: []string{"Alloc", "PollCount"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fa := &fakeAuditor{}
+			s := NewMetricService(repository.NewMemStorage(), fa)
+
+			err := tt.call(s)
+			require.NoError(t, err)
+
+			calls := fa.Calls()
+			require.Len(t, calls, 1, "expected exactly one audit notification")
+			assert.Equal(t, "192.168.0.42", calls[0].ip)
+			gotIDs := make([]string, 0, len(calls[0].metrics))
+			for _, m := range calls[0].metrics {
+				gotIDs = append(gotIDs, m.ID)
+			}
+			assert.Equal(t, tt.wantIDs, gotIDs)
+		})
+	}
+}
+
+func TestAuditNotNotifiedOnFailedUpdates(t *testing.T) {
+	ctx := t.Context()
+
+	tests := []struct {
+		name  string
+		setUp func(s *MetricService)
+		call  func(s *MetricService) error
+	}{
+		{
+			name: "UpdateCounterByName on existing gauge",
+			setUp: func(s *MetricService) {
+				require.NoError(t, s.UpdateGaugeByName(ctx, "Alloc", 1.25))
+			},
+			call: func(s *MetricService) error {
+				return s.UpdateCounterByName(ctx, "Alloc", 1)
+			},
+		},
+		{
+			name: "UpdateGauge with invalid type conflict",
+			setUp: func(s *MetricService) {
+				require.NoError(t, s.UpdateCounterByName(ctx, "PollCount", 1))
+			},
+			call: func(s *MetricService) error {
+				return s.UpdateGauge(ctx, models.Metrics{ID: "PollCount", MType: models.Gauge, Value: utils.FloatPtr(1.0)})
+			},
+		},
+		{
+			name: "UpdateMetrics batch with invalid metric type",
+			call: func(s *MetricService) error {
+				return s.UpdateMetrics(ctx, []models.Metrics{{ID: "bad", MType: "invalid", Value: utils.FloatPtr(1.0)}})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fa := &fakeAuditor{}
+			s := NewMetricService(repository.NewMemStorage(), fa)
+			if tt.setUp != nil {
+				tt.setUp(s)
+			}
+			// Any audit calls fired during setUp shouldn't count toward the assertion below.
+			fa.mu.Lock()
+			fa.calls = nil
+			fa.mu.Unlock()
+
+			err := tt.call(s)
+			require.Error(t, err)
+			assert.Empty(t, fa.Calls(), "auditor should not be notified when the update failed")
+		})
+	}
+}
+
+func TestAuditReceivesClientIPFromMiddleware(t *testing.T) {
+	fa := &fakeAuditor{}
+	s := NewMetricService(repository.NewMemStorage(), fa)
+
+	ctx := utils.WithClientIP(context.Background(), "127.0.0.1")
+	s.UpdateGaugeByName(ctx, "Alloc", 1.25)
+
+	calls := fa.Calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "127.0.0.1", calls[0].ip)
 }

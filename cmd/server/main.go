@@ -8,18 +8,21 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"github.com/LifeforDream/gometrics/internal/audit"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwhash"
+	"github.com/LifeforDream/gometrics/internal/middlewares/mwip"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
-	"github.com/go-chi/chi/v5/middleware"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 )
 
 func main() {
@@ -62,11 +65,29 @@ func main() {
 		repo = repository.NewMemStorage()
 	}
 
-	svc := service.NewMetricService(repo)
+	auditor := audit.NewAuditor(logger)
+	if serverOptions.AuditFilePath != "" {
+		fasender, err := audit.NewFileAuditSender(serverOptions.AuditFilePath, logger)
+		if err != nil {
+			logger.Warn("error opening file for audit writing", zap.Error(err))
+		} else {
+			auditor.RegisterSub(fasender)
+		}
+	}
+	if serverOptions.AuditURL != "" {
+		httpsender, err := audit.NewHTTPAuditSender(serverOptions.AuditURL, logger)
+		if err != nil {
+			logger.Warn("error creating sender for audit http sender", zap.Error(err))
+		} else {
+			auditor.RegisterSub(httpsender)
+		}
+	}
+
+	svc := service.NewMetricService(repo, auditor)
 	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
 		Addr:    serverOptions.RunAddr,
-		Handler: router.MetricsRouter(h, logs.WithLogging(logger), mwhash.WithHash(serverOptions.HashKey, logger), middleware.StripSlashes, mwcompress.Compress(logger)),
+		Handler: router.MetricsRouter(h, logs.WithLogging(logger), mwip.WithClientIP, mwhash.WithHash(serverOptions.HashKey, logger), middleware.StripSlashes, mwcompress.Compress(logger)),
 	}
 
 	serverErr := make(chan error, 1)
@@ -95,4 +116,5 @@ func main() {
 	if err != nil {
 		logger.Error("Error closing repo", zap.Error(err))
 	}
+	auditor.Close()
 }

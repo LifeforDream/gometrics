@@ -1,3 +1,5 @@
+// Package mwcompress содержит chi-мидлвар для прозрачной gzip-компрессии
+// ответов и декомпрессии тел запросов.
 package mwcompress
 
 import (
@@ -5,8 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/LifeforDream/gometrics/internal/compress"
 	"go.uber.org/zap"
+
+	"github.com/LifeforDream/gometrics/internal/compress"
 )
 
 var encodableTypes = []string{"application/json", "text/html"}
@@ -42,7 +45,6 @@ func (c *compressWriter) Header() http.Header {
 func (c *compressWriter) Write(p []byte) (int, error) {
 	if c.toEncode(c.w) {
 		c.wroteGzip = true
-		// in case of missing WriteHeader() in handler
 		c.w.Header().Set("Content-Encoding", "gzip")
 		return c.zw.Write(p)
 	}
@@ -64,6 +66,12 @@ func (c *compressWriter) Close() error {
 	return nil
 }
 
+// Compress возвращает chi-мидлвар: всегда оборачивает ответ в
+// compressWriter, который сжимает тело gzip'ом, только если клиент
+// поддерживает его (заголовок Accept-Encoding) и Content-Type ответа —
+// application/json или text/html. Если входящий запрос сжат
+// (Content-Encoding: gzip), его тело прозрачно декомпрессируется перед
+// передачей в h.
 func Compress(log *zap.Logger) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

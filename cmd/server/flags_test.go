@@ -23,6 +23,8 @@ func TestParseOptions(t *testing.T) {
 				"-r", "f",
 				"-d", "postgres://u:u@localhost/db",
 				"-k", "a",
+				"-audit-file", "audit_a.log",
+				"-audit-url", "http://a.example/audit",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
@@ -32,6 +34,8 @@ func TestParseOptions(t *testing.T) {
 				"RESTORE":           "t",
 				"DATABASE_DSN":      "postgres://a:a@localhost/a",
 				"KEY":               "secret",
+				"AUDIT_FILE":        "audit_b.log",
+				"AUDIT_URL":         "http://b.example/audit",
 			},
 			expected: ServerOptions{
 				RunAddr:       "localhost:8082",
@@ -41,6 +45,8 @@ func TestParseOptions(t *testing.T) {
 				ToRestore:     true,
 				DatabaseDsn:   "postgres://a:a@localhost/a",
 				HashKey:       "secret",
+				AuditFilePath: "audit_b.log",
+				AuditURL:      "http://b.example/audit",
 			},
 		},
 		{
@@ -99,6 +105,35 @@ func TestParseOptions(t *testing.T) {
 				HashKey:       "",
 			},
 		},
+		{
+			name: "audit flags only, no env overrides",
+			args: []string{
+				"-audit-file", "audit.log",
+				"-audit-url", "http://localhost:9000/audit",
+			},
+			envParams: map[string]string{},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				AuditFilePath: "audit.log",
+				AuditURL:      "http://localhost:9000/audit",
+			},
+		},
+		{
+			name:      "audit disabled by default",
+			args:      []string{},
+			envParams: map[string]string{},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				AuditFilePath: "",
+				AuditURL:      "",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -114,6 +149,8 @@ func TestParseOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.ToRestore, result.ToRestore)
 			assert.Equal(t, tt.expected.DatabaseDsn, result.DatabaseDsn)
 			assert.Equal(t, tt.expected.HashKey, result.HashKey)
+			assert.Equal(t, tt.expected.AuditFilePath, result.AuditFilePath)
+			assert.Equal(t, tt.expected.AuditURL, result.AuditURL)
 		})
 	}
 }
