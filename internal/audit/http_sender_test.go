@@ -42,11 +42,11 @@ func TestHTTPAuditSender_PostsEventAsJSON(t *testing.T) {
 		close(done)
 	}()
 
-	c <- Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
+	c <- Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
 
 	select {
 	case e := <-received:
-		assert.Equal(t, Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}, e)
+		assert.Equal(t, Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}, e)
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for server to receive audit event")
 	}
@@ -74,7 +74,7 @@ func TestHTTPAuditSender_LogsErrorResponseStatus(t *testing.T) {
 		close(done)
 	}()
 
-	c <- Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
+	c <- Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
 	close(c)
 	<-done
 
@@ -97,7 +97,7 @@ func TestHTTPAuditSender_LogsRequestError(t *testing.T) {
 		close(done)
 	}()
 
-	c <- Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
+	c <- Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
 	close(c)
 	<-done
 

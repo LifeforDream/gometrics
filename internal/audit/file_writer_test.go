@@ -38,8 +38,8 @@ func TestFileAuditSender_WritesEventsAsJSONLines(t *testing.T) {
 		close(done)
 	}()
 
-	c <- Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
-	c <- Event{Ts: 2, Metrics: []string{"PollCount"}, IPAddress: "5.6.7.8"}
+	c <- Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}
+	c <- Event{TS: 2, Metrics: []string{"PollCount"}, IPAddress: "5.6.7.8"}
 	close(c)
 	<-done // worker() closes the file on exit, so the file is fully flushed here
 
@@ -51,8 +51,8 @@ func TestFileAuditSender_WritesEventsAsJSONLines(t *testing.T) {
 	var e1, e2 Event
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &e1))
 	require.NoError(t, json.Unmarshal([]byte(lines[1]), &e2))
-	assert.Equal(t, Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}, e1)
-	assert.Equal(t, Event{Ts: 2, Metrics: []string{"PollCount"}, IPAddress: "5.6.7.8"}, e2)
+	assert.Equal(t, Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"}, e1)
+	assert.Equal(t, Event{TS: 2, Metrics: []string{"PollCount"}, IPAddress: "5.6.7.8"}, e2)
 }
 
 func TestFileAuditSender_AppendsAcrossSenders(t *testing.T) {
@@ -73,8 +73,8 @@ func TestFileAuditSender_AppendsAcrossSenders(t *testing.T) {
 		<-done
 	}
 
-	writeOne(Event{Ts: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"})
-	writeOne(Event{Ts: 2, Metrics: []string{"PollCount"}, IPAddress: "5.6.7.8"})
+	writeOne(Event{TS: 1, Metrics: []string{"Alloc"}, IPAddress: "1.2.3.4"})
+	writeOne(Event{TS: 2, Metrics: []string{"PollCount"}, IPAddress: "5.6.7.8"})
 
 	data, err := os.ReadFile(fpath)
 	require.NoError(t, err)

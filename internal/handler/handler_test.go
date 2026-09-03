@@ -270,7 +270,8 @@ func TestUpdateMetric(t *testing.T) {
 
 			for _, s := range tt.setUp {
 				path := fmt.Sprintf("/update/%s/%s/%s", s.metricType, s.metricName, s.metricValue)
-				testRequest(t, ts, s.method, path)
+				resp, _ := testRequest(t, ts, s.method, path)
+				defer resp.Body.Close()
 			}
 
 			path := fmt.Sprintf("/update/%s/%s/%s", tt.input.metricType, tt.input.metricName, tt.input.metricValue)
@@ -516,7 +517,8 @@ func TestUpdateMetricJson(t *testing.T) {
 			defer ts.Close()
 
 			for _, s := range tt.setUp {
-				testRequestJSON(t, ts, http.MethodPost, "/update", s.contentType, s.rawBody)
+				resp, _ := testRequestJSON(t, ts, http.MethodPost, "/update", s.contentType, s.rawBody)
+				defer resp.Body.Close()
 			}
 
 			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/update", tt.input.contentType, tt.input.rawBody)
