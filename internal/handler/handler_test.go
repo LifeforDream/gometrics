@@ -86,6 +86,7 @@ func TestGetMetrics(t *testing.T) {
 				}
 			}
 			resp, get := testRequest(t, ts, http.MethodGet, "/")
+			defer resp.Body.Close()
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			for _, metric := range tt.want {
 				assert.Contains(t, get, metric.name)
@@ -154,6 +155,7 @@ func TestGetMetric(t *testing.T) {
 
 			url := fmt.Sprintf("/value/%s/%s", tt.input.metricType, tt.input.metricName)
 			resp, get := testRequest(t, ts, http.MethodGet, url)
+			defer resp.Body.Close()
 
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 			assert.Equal(t, tt.want.value, get)
@@ -273,6 +275,7 @@ func TestUpdateMetric(t *testing.T) {
 
 			path := fmt.Sprintf("/update/%s/%s/%s", tt.input.metricType, tt.input.metricName, tt.input.metricValue)
 			resp, _ := testRequest(t, ts, tt.input.method, path)
+			defer resp.Body.Close()
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 		})
 	}
@@ -408,6 +411,7 @@ func TestGetMetricJson(t *testing.T) {
 			defer ts.Close()
 
 			resp, body := testRequestJSON(t, ts, http.MethodPost, "/value", tt.contentType, tt.rawBody)
+			defer resp.Body.Close()
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 			if tt.want.statusCode == http.StatusOK {
 				var got models.Metrics
@@ -516,6 +520,7 @@ func TestUpdateMetricJson(t *testing.T) {
 			}
 
 			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/update", tt.input.contentType, tt.input.rawBody)
+			defer resp.Body.Close()
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 		})
 	}
@@ -608,6 +613,7 @@ func TestUpdateMetricsBatch(t *testing.T) {
 			defer ts.Close()
 
 			resp, _ := testRequestJSON(t, ts, http.MethodPost, "/updates", tt.input.contentType, tt.input.rawBody)
+			defer resp.Body.Close()
 			assert.Equal(t, tt.want.statusCode, resp.StatusCode)
 		})
 	}
