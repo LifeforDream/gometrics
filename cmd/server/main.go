@@ -49,7 +49,7 @@ func main() {
 			logger.Fatal("Error opening connection to db", zap.Error(err))
 		}
 
-		repo, err = repository.NewDbStorage(ctx, pool, logger)
+		repo, err = repository.NewDBStorage(ctx, pool, logger)
 		if err != nil {
 			logger.Fatal("Error initializing db storage", zap.Error(err))
 		}

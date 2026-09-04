@@ -238,7 +238,7 @@ func TestMemUpdateMetrics(t *testing.T) {
 			wantErr: true,
 			verify: func(t *testing.T, repo *MemStorage) {
 				_, err := repo.GetMetric(context.Background(), "pollcount")
-				assert.ErrorIs(t, err, myErrors.MetricNotFound)
+				assert.ErrorIs(t, err, myErrors.ErrMetricNotFound)
 			},
 		},
 	}

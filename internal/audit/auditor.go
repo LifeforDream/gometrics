@@ -113,7 +113,7 @@ func (a *Auditor) Update(metrics []models.Metrics, ipAddress string) {
 	}
 
 	var ae Event
-	ae.Ts = time.Now().Unix()
+	ae.TS = time.Now().Unix()
 	ae.Metrics = make([]string, 0, len(metrics))
 	for _, met := range metrics {
 		ae.Metrics = append(ae.Metrics, met.ID)
