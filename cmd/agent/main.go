@@ -7,10 +7,19 @@ import (
 	"os/signal"
 
 	agent "github.com/LifeforDream/gometrics/internal/agent"
+	"github.com/LifeforDream/gometrics/internal/buildinfo"
 	"github.com/LifeforDream/gometrics/internal/logging"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
+
 	agentOptions, err := parseOptions()
 	if err != nil {
 		log.Fatal(err)
