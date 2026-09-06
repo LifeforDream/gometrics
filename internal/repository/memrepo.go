@@ -1,6 +1,6 @@
 // Package repository содержит реализации интерфейса service.MetricRepo:
 // MemStorage (в памяти), FileBackedStorage (с сохранением на диск) и
-// DbStorage (PostgreSQL).
+// DBStorage (PostgreSQL).
 package repository
 
 import (
@@ -55,14 +55,14 @@ func (m *MemStorage) SetAll(data map[string]models.Metrics) {
 	m.store = data
 }
 
-// GetMetric возвращает метрику по имени или myErrors.MetricNotFound,
+// GetMetric возвращает метрику по имени или myErrors.ErrMetricNotFound,
 // если такой метрики нет.
 func (m *MemStorage) GetMetric(ctx context.Context, name string) (models.Metrics, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	metric, ok := m.store[name]
 	if !ok {
-		return models.Metrics{}, myErrors.MetricNotFound
+		return models.Metrics{}, myErrors.ErrMetricNotFound
 	}
 	return metric, nil
 }
@@ -136,7 +136,7 @@ func (m *MemStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics
 		case models.Gauge:
 			err = m.setGauge(metric)
 		default:
-			err = myErrors.NonexistentMetricType
+			err = myErrors.ErrNonexistentMetricType
 		}
 		if err != nil {
 			return err

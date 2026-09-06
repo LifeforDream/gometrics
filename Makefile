@@ -23,3 +23,9 @@ profile-heap:
 
 gen-swagger:
 	swag init --output ./swagger/
+
+clear-genreset:
+	[ ! -e cmd/reset/reset ] || rm cmd/reset/reset
+
+genreset: clear-genreset
+	go build -o cmd/reset/reset ./cmd/reset && ./cmd/reset/reset

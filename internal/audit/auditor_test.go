@@ -68,8 +68,8 @@ func TestAuditorUpdate_DispatchesToSubscriber(t *testing.T) {
 	got := recvEvent(t, sender.got)
 	assert.Equal(t, []string{"Alloc", "PollCount"}, got.Metrics)
 	assert.Equal(t, "192.168.0.42", got.IPAddress)
-	assert.GreaterOrEqual(t, got.Ts, before)
-	assert.LessOrEqual(t, got.Ts, after)
+	assert.GreaterOrEqual(t, got.TS, before)
+	assert.LessOrEqual(t, got.TS, after)
 }
 
 func TestAuditorUpdate_BroadcastsToAllSubscribers(t *testing.T) {

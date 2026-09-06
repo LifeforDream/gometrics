@@ -71,7 +71,7 @@ func TestDbGetAllSlice(t *testing.T) {
 			}
 			defer mock.Close()
 			tt.setup(mock)
-			got, err := newDbStorageForTest(mock).GetAllSlice(context.Background())
+			got, err := newDBStorageForTest(mock).GetAllSlice(context.Background())
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -134,11 +134,11 @@ func TestDbGetMetric(t *testing.T) {
 			defer mock.Close()
 			tt.setup(mock)
 
-			got, err := newDbStorageForTest(mock).GetMetric(context.Background(), tt.metricName)
+			got, err := newDBStorageForTest(mock).GetMetric(context.Background(), tt.metricName)
 
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.True(t, errors.Is(err, myErrors.MetricNotFound))
+				assert.True(t, errors.Is(err, myErrors.ErrMetricNotFound))
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, tt.want, got)
@@ -204,7 +204,7 @@ func TestDbSetGauge(t *testing.T) {
 			defer mock.Close()
 			tt.setup(mock)
 
-			err = newDbStorageForTest(mock).SetGauge(context.Background(), tt.metric)
+			err = newDBStorageForTest(mock).SetGauge(context.Background(), tt.metric)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -276,7 +276,7 @@ func TestDbUpdateCounter(t *testing.T) {
 			defer mock.Close()
 			tt.setup(mock)
 
-			err = newDbStorageForTest(mock).UpdateCounter(context.Background(), tt.metric)
+			err = newDBStorageForTest(mock).UpdateCounter(context.Background(), tt.metric)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -361,7 +361,7 @@ func TestDbUpdateMetrics(t *testing.T) {
 			defer mock.Close()
 			tt.setup(mock)
 
-			err = newDbStorageForTest(mock).UpdateMetrics(context.Background(), tt.input)
+			err = newDBStorageForTest(mock).UpdateMetrics(context.Background(), tt.input)
 
 			if tt.wantErr {
 				require.Error(t, err)

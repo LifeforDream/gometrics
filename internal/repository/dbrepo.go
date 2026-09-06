@@ -21,7 +21,7 @@ import (
 )
 
 // PgxIface — абстракция над *pgxpool.Pool, нужная ради тестируемости
-// DbStorage через go-sqlmock без поднятия реальной базы.
+// DBStorage через go-sqlmock без поднятия реальной базы.
 type PgxIface interface {
 	Ping(ctx context.Context) error
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
@@ -33,28 +33,28 @@ type PgxIface interface {
 //go:embed migrations
 var migrationsFS embed.FS
 
-// DbStorage хранит метрики в PostgreSQL. SetGauge и UpdateCounter
+// DBStorage хранит метрики в PostgreSQL. SetGauge и UpdateCounter
 // используют атомарный UPSERT (INSERT … ON CONFLICT … DO UPDATE … WHERE
 // mtype = EXCLUDED.mtype); при несовпадении типа возвращают
 // myErrors.InvalidMetricType. UpdateMetrics выполняет весь батч в одной
 // транзакции с откатом через defer при любой ошибке.
-type DbStorage struct {
+type DBStorage struct {
 	pool   PgxIface
 	logger *zap.Logger
 }
 
-// NewDbStorage создаёт DbStorage поверх пула соединений pool и накатывает
+// NewDBStorage создаёт DBStorage поверх пула соединений pool и накатывает
 // схему БД через встроенные миграции (см. performMigrate).
-func NewDbStorage(ctx context.Context, pool PgxIface, logger *zap.Logger) (*DbStorage, error) {
-	store := &DbStorage{pool: pool, logger: logger}
+func NewDBStorage(ctx context.Context, pool PgxIface, logger *zap.Logger) (*DBStorage, error) {
+	store := &DBStorage{pool: pool, logger: logger}
 	return store, store.performMigrate(ctx)
 }
 
-func newDbStorageForTest(pool PgxIface) *DbStorage {
-	return &DbStorage{pool: pool, logger: zap.NewNop()}
+func newDBStorageForTest(pool PgxIface) *DBStorage {
+	return &DBStorage{pool: pool, logger: zap.NewNop()}
 }
 
-func (ds *DbStorage) performMigrate(ctx context.Context) error {
+func (ds *DBStorage) performMigrate(ctx context.Context) error {
 	return utils.WithRetryPG(ctx, func() error {
 		pool, ok := ds.pool.(*pgxpool.Pool)
 		if !ok {
@@ -97,13 +97,13 @@ func (ds *DbStorage) performMigrate(ctx context.Context) error {
 }
 
 // Ping проверяет доступность соединения с базой данных.
-func (ds *DbStorage) Ping(ctx context.Context) error {
+func (ds *DBStorage) Ping(ctx context.Context) error {
 	return ds.pool.Ping(ctx)
 }
 
 // GetAllSlice возвращает все метрики из таблицы metrics, с ретраями через
 // utils.WithRetryPG.
-func (ds *DbStorage) GetAllSlice(ctx context.Context) ([]models.Metrics, error) {
+func (ds *DBStorage) GetAllSlice(ctx context.Context) ([]models.Metrics, error) {
 	metrics := make([]models.Metrics, 0)
 	err := utils.WithRetryPG(ctx, func() error {
 		metrics = metrics[:0]
@@ -132,15 +132,15 @@ func (ds *DbStorage) GetAllSlice(ctx context.Context) ([]models.Metrics, error) 
 }
 
 // GetMetric возвращает метрику по имени, с ретраями через utils.WithRetryPG.
-// Возвращает myErrors.MetricNotFound, если строка с таким id отсутствует.
-func (ds *DbStorage) GetMetric(ctx context.Context, name string) (models.Metrics, error) {
+// Возвращает myErrors.ErrMetricNotFound, если строка с таким id отсутствует.
+func (ds *DBStorage) GetMetric(ctx context.Context, name string) (models.Metrics, error) {
 	var metric models.Metrics
 	err := utils.WithRetryPG(ctx, func() error {
 		row := ds.pool.QueryRow(ctx, "SELECT id, mtype, delta, value, hash FROM metrics WHERE id = $1", name)
 		err := row.Scan(&metric.ID, &metric.MType, &metric.Delta, &metric.Value, &metric.Hash)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("%w: %q", myErrors.MetricNotFound, name)
+				return fmt.Errorf("%w: %q", myErrors.ErrMetricNotFound, name)
 			}
 			return err
 		}
@@ -151,7 +151,7 @@ func (ds *DbStorage) GetMetric(ctx context.Context, name string) (models.Metrics
 
 // SetGauge атомарно заменяет хранимое значение метрики типа gauge внутри
 // собственной транзакции (см. setGauge), с ретраями через utils.WithRetryPG.
-func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
+func (ds *DBStorage) SetGauge(ctx context.Context, metric models.Metrics) error {
 	return utils.WithRetryPG(ctx, func() error {
 		tx, err := ds.pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -172,7 +172,7 @@ func (ds *DbStorage) SetGauge(ctx context.Context, metric models.Metrics) error 
 	})
 }
 
-func (ds *DbStorage) setGauge(ctx context.Context, tx pgx.Tx, metric models.Metrics) error {
+func (ds *DBStorage) setGauge(ctx context.Context, tx pgx.Tx, metric models.Metrics) error {
 	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype"
 	result, err := tx.Exec(ctx, query, metric.ID, metric.MType, nil, *metric.Value, metric.Hash)
 	if err != nil {
@@ -198,7 +198,7 @@ func (ds *DbStorage) setGauge(ctx context.Context, tx pgx.Tx, metric models.Metr
 // UpdateCounter атомарно прибавляет Delta метрики к ранее сохранённому
 // значению метрики типа counter внутри собственной транзакции
 // (см. updateCounter), с ретраями через utils.WithRetryPG.
-func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
+func (ds *DBStorage) UpdateCounter(ctx context.Context, metric models.Metrics) error {
 	return utils.WithRetryPG(ctx, func() error {
 		tx, err := ds.pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -219,7 +219,7 @@ func (ds *DbStorage) UpdateCounter(ctx context.Context, metric models.Metrics) e
 	})
 }
 
-func (ds *DbStorage) updateCounter(ctx context.Context, tx pgx.Tx, metric models.Metrics) error {
+func (ds *DBStorage) updateCounter(ctx context.Context, tx pgx.Tx, metric models.Metrics) error {
 	query := "INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype"
 	result, err := tx.Exec(ctx, query, metric.ID, metric.MType, *metric.Delta, nil, metric.Hash)
 	if err != nil {
@@ -245,7 +245,7 @@ func (ds *DbStorage) updateCounter(ctx context.Context, tx pgx.Tx, metric models
 // UpdateMetrics выполняет весь батч апдейтов gauge/counter в одной
 // транзакции через pgx.Batch, с откатом через defer при любой ошибке
 // и ретраями всей операции через utils.WithRetryPG.
-func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+func (ds *DBStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
 	return utils.WithRetryPG(ctx, func() error {
 		tx, err := ds.pool.BeginTx(ctx, pgx.TxOptions{})
 		if err != nil {
@@ -274,7 +274,7 @@ func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics
 					metric.ID, metric.MType, nil, *metric.Value, metric.Hash,
 				)
 			default:
-				err = fmt.Errorf("%w: %q", myErrors.NonexistentMetricType, metric.MType)
+				err = fmt.Errorf("%w: %q", myErrors.ErrNonexistentMetricType, metric.MType)
 			}
 			if err != nil {
 				return err
@@ -290,7 +290,7 @@ func (ds *DbStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics
 }
 
 // Close закрывает пул соединений с базой данных.
-func (ds *DbStorage) Close() error {
+func (ds *DBStorage) Close() error {
 	ds.pool.Close()
 	return nil
 }
