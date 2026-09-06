@@ -47,10 +47,14 @@ func doExitNested(flag bool) {
 	}
 }
 
-// doFatalln демонстрирует, что сравнение идёт только по точному имени
-// функции "Fatal", поэтому log.Fatalln не обнаруживается.
+// doFatalf и doFatalln проверяют, что разновидности log.Fatal с
+// суффиксами f/ln обнаруживаются наравне с самим log.Fatal.
+func doFatalf() {
+	log.Fatalf("fatal error: %s", "boom") // want "found log.Fatalf usage outside main.main"
+}
+
 func doFatalln() {
-	log.Fatalln("not an exact match for Fatal, not detected")
+	log.Fatalln("fatal error") // want "found log.Fatalln usage outside main.main"
 }
 
 // main объявлена в пакете, который не называется буквально "main",

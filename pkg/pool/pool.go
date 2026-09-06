@@ -20,6 +20,9 @@ func New[T resettable](newF func() T) *Pool[T] {
 	return &Pool[T]{
 		pool: sync.Pool{
 			New: func() any {
+				if newF == nil {
+					return *new(T)
+				}
 				return newF()
 			},
 		},

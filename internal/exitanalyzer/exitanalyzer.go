@@ -1,6 +1,10 @@
-// Package exitanalyzer реализует проверку на:
+// Package exitanalyzer реализует проверку на завершение процесса в непредвиденных местах, например:
+//
 // - использование panic() в коде приложения
-// - использование log.Fatal() и os.Exit() вне функции main пакета main
+//
+// - использование os.Exit() вне функции main пакета main
+//
+// - использование log.Fatal() и его разновидностей
 package exitanalyzer
 
 import (
@@ -19,10 +23,8 @@ var ExitAnalyzer = &analysis.Analyzer{
 }
 
 const (
-	// panicLit - зарезервированный литерал panic
 	panicLit = "panic"
-	// mainLit - зарезервированный литерал main
-	mainLit = "main"
+	mainLit  = "main"
 )
 
 type forbiddenCall struct {
@@ -31,6 +33,8 @@ type forbiddenCall struct {
 
 var forbiddenCalls = []forbiddenCall{
 	{"log", "Fatal"},
+	{"log", "Fatalf"},
+	{"log", "Fatalln"},
 	{"os", "Exit"},
 }
 
@@ -44,9 +48,6 @@ func isPanicStmt(call *ast.CallExpr) bool {
 }
 
 func findPanics(pass *analysis.Pass, file *ast.File) {
-	if strings.HasSuffix(pass.Fset.File(file.Pos()).Name(), "_test.go") {
-		return
-	}
 	ast.Inspect(file, func(node ast.Node) bool {
 		switch x := node.(type) {
 		case *ast.ExprStmt:
@@ -120,6 +121,9 @@ func findLogExits(pass *analysis.Pass, file *ast.File) {
 
 func run(pass *analysis.Pass) (any, error) {
 	for _, file := range pass.Files {
+		if strings.HasSuffix(pass.Fset.File(file.Pos()).Name(), "_test.go") {
+			continue
+		}
 		findPanics(pass, file)
 		findLogExits(pass, file)
 	}
