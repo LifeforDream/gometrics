@@ -31,6 +31,25 @@ git fetch template && git checkout template/v2 .github
 
 Подробнее про локальный и автоматический запуск читайте в [README автотестов](https://github.com/Yandex-Practicum/go-autotests).
 
+## Сборка с информацией о версии
+
+Пакеты `cmd/server` и `cmd/agent` содержат переменные `buildVersion`, `buildDate` и `buildCommit`, которые по умолчанию равны `"N/A"`. Их значения можно задать на этапе компиляции через флаг `-ldflags` и опцию `-X`:
+
+```bash
+go build -ldflags "-X main.buildVersion=v1.0.0 -X main.buildDate=$(date +'%Y/%m/%d %H:%M:%S') -X main.buildCommit=$(git rev-parse HEAD)" -o cmd/server/server ./cmd/server
+```
+```bash
+go build -ldflags "-X main.buildVersion=v1.0.0 -X main.buildDate=$(date +'%Y/%m/%d %H:%M:%S') -X main.buildCommit=$(git rev-parse HEAD)" -o cmd/agent/agent ./cmd/agent
+```
+
+При запуске бинарник выведет эти значения в stdout:
+
+```
+Build version: v1.0.0
+Build date: 2026/09/06 12:00:00
+Build commit: a1b2c3d4e5f6...
+```
+
 ## Структура проекта
 
 Приведённая в этом репозитории структура проекта является рекомендуемой, но не обязательной.

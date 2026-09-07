@@ -19,7 +19,7 @@ import (
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
 )
 
-const pageHtml = `<html>
+const pageHTML = `<html>
 <body>
 <h1> Known Metrics: </h1>
 %s
@@ -79,7 +79,7 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 		metricslist = append(metricslist, "</ul>")
 	}
-	page := fmt.Sprintf(pageHtml, strings.Join(metricslist, "\r\n"))
+	page := fmt.Sprintf(pageHTML, strings.Join(metricslist, "\r\n"))
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
@@ -99,7 +99,7 @@ func (h *Handler) GetMetricValue(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &invalidTypeErr) {
 			h.logger.Debug("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
-		} else if errors.Is(err, myErrors.MetricNotFound) {
+		} else if errors.Is(err, myErrors.ErrMetricNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -205,7 +205,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &invalidTypeErr) {
 			h.logger.Debug("Invalid metric type", zap.String("newType", invalidTypeErr.NewType))
 			w.WriteHeader(http.StatusBadRequest)
-		} else if errors.Is(err, myErrors.MetricNotFound) {
+		} else if errors.Is(err, myErrors.ErrMetricNotFound) {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)

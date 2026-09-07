@@ -9,18 +9,18 @@ import (
 )
 
 var (
-	// MetricNotFound возвращается репозиторием, когда метрика с запрошенным
+	// ErrMetricNotFound возвращается репозиторием, когда метрика с запрошенным
 	// именем отсутствует в хранилище.
-	MetricNotFound = errors.New("metric not found")
-	// NonexistentMetricType возвращается, когда MType метрики не равен
+	ErrMetricNotFound = errors.New("metric not found")
+	// ErrNonexistentMetricType возвращается, когда MType метрики не равен
 	// ни models.Counter, ни models.Gauge.
-	NonexistentMetricType = errors.New("non-existent metric type")
-	// EmptyCounterDelta возвращается ValidateMetric, когда для метрики типа
+	ErrNonexistentMetricType = errors.New("non-existent metric type")
+	// ErrEmptyCounterDelta возвращается ValidateMetric, когда для метрики типа
 	// counter не задано поле Delta.
-	EmptyCounterDelta = errors.New("empty delta field for counter")
-	// EmptyGaugeValue возвращается ValidateMetric, когда для метрики типа
+	ErrEmptyCounterDelta = errors.New("empty delta field for counter")
+	// ErrEmptyGaugeValue возвращается ValidateMetric, когда для метрики типа
 	// gauge не задано поле Value.
-	EmptyGaugeValue = errors.New("empty value field for gauge")
+	ErrEmptyGaugeValue = errors.New("empty value field for gauge")
 )
 
 // InvalidMetricType возвращается при попытке обновить существующую метрику

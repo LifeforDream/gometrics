@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/LifeforDream/gometrics/internal/audit"
+	"github.com/LifeforDream/gometrics/internal/buildinfo"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
@@ -25,7 +26,15 @@ import (
 	"github.com/LifeforDream/gometrics/internal/service"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
+
 	serverOptions, err := parseOptions()
 	if err != nil {
 		log.Fatal(err)
@@ -49,7 +58,7 @@ func main() {
 			logger.Fatal("Error opening connection to db", zap.Error(err))
 		}
 
-		repo, err = repository.NewDbStorage(ctx, pool, logger)
+		repo, err = repository.NewDBStorage(ctx, pool, logger)
 		if err != nil {
 			logger.Fatal("Error initializing db storage", zap.Error(err))
 		}

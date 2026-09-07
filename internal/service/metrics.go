@@ -13,7 +13,7 @@ import (
 )
 
 // MetricRepo — контракт хранилища метрик, реализуемый MemStorage,
-// FileBackedStorage и DbStorage; MetricService работает с любым из них
+// FileBackedStorage и DBStorage; MetricService работает с любым из них
 // через этот интерфейс.
 type MetricRepo interface {
 	GetAllSlice(ctx context.Context) ([]models.Metrics, error)
@@ -185,14 +185,14 @@ func (s *MetricService) ValidateMetric(metric models.Metrics) error {
 	switch metric.MType {
 	case models.Counter:
 		if metric.Delta == nil {
-			return myErrors.EmptyCounterDelta
+			return myErrors.ErrEmptyCounterDelta
 		}
 	case models.Gauge:
 		if metric.Value == nil {
-			return myErrors.EmptyGaugeValue
+			return myErrors.ErrEmptyGaugeValue
 		}
 	default:
-		return myErrors.NonexistentMetricType
+		return myErrors.ErrNonexistentMetricType
 	}
 	return nil
 }
