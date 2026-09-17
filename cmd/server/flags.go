@@ -17,11 +17,12 @@ type ServerOptions struct {
 	// по умолчанию 300. Если <= 0, запись синхронна при каждом обновлении.
 	StoreInterval int    `env:"STORE_INTERVAL"`
 	FileStorePath string `env:"FILE_STORAGE_PATH"` // путь к файлу хранения метрик; флаг -f, по умолчанию ""
-	ToRestore     bool   `env:"RESTORE"`            // восстанавливать ли метрики из файла при старте; флаг -r, по умолчанию true
-	DatabaseDsn   string `env:"DATABASE_DSN"`       // DSN подключения к PostgreSQL; флаг -d, по умолчанию "" (тогда используется файловое или memory-хранилище)
-	HashKey       string `env:"KEY"`                // ключ HMAC-подписи тела запроса/ответа; флаг -k, по умолчанию ""
-	AuditFilePath string `env:"AUDIT_FILE"`         // путь к файлу для записи аудита; флаг -audit-file, по умолчанию ""
-	AuditURL      string `env:"AUDIT_URL"`          // URL для отправки аудита по HTTP; флаг -audit-url, по умолчанию ""
+	ToRestore     bool   `env:"RESTORE"`           // восстанавливать ли метрики из файла при старте; флаг -r, по умолчанию true
+	DatabaseDsn   string `env:"DATABASE_DSN"`      // DSN подключения к PostgreSQL; флаг -d, по умолчанию "" (тогда используется файловое или memory-хранилище)
+	HashKey       string `env:"KEY"`               // ключ HMAC-подписи тела запроса/ответа; флаг -k, по умолчанию ""
+	AuditFilePath string `env:"AUDIT_FILE"`        // путь к файлу для записи аудита; флаг -audit-file, по умолчанию ""
+	AuditURL      string `env:"AUDIT_URL"`         // URL для отправки аудита по HTTP; флаг -audit-url, по умолчанию ""
+	CryptoKeyPath string `env:"CRYPTO_KEY"`        // путь к файлу с приватным ключом для расшифровки запросов
 }
 
 func parseOptions(args ...string) (*ServerOptions, error) {
@@ -37,6 +38,7 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 	fs.StringVar(&serverOptions.HashKey, "k", "", "hash key")
 	fs.StringVar(&serverOptions.AuditFilePath, "audit-file", "", "filepath to save audit logs to")
 	fs.StringVar(&serverOptions.AuditURL, "audit-url", "", "url to send audit logs to")
+	fs.StringVar(&serverOptions.CryptoKeyPath, "crypto-key", "", "filepath to a private key storage")
 
 	if args == nil {
 		args = os.Args[1:]

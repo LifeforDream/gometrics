@@ -25,6 +25,7 @@ func TestParseOptions(t *testing.T) {
 				"-k", "a",
 				"-audit-file", "audit_a.log",
 				"-audit-url", "http://a.example/audit",
+				"-crypto-key", "/path/from/flag.pem",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
@@ -36,6 +37,7 @@ func TestParseOptions(t *testing.T) {
 				"KEY":               "secret",
 				"AUDIT_FILE":        "audit_b.log",
 				"AUDIT_URL":         "http://b.example/audit",
+				"CRYPTO_KEY":        "/path/from/env.pem",
 			},
 			expected: ServerOptions{
 				RunAddr:       "localhost:8082",
@@ -47,11 +49,12 @@ func TestParseOptions(t *testing.T) {
 				HashKey:       "secret",
 				AuditFilePath: "audit_b.log",
 				AuditURL:      "http://b.example/audit",
+				CryptoKeyPath: "/path/from/env.pem",
 			},
 		},
 		{
 			name:      "envs don't overwrite when empty",
-			args:      []string{"-a", "localhost:8085"},
+			args:      []string{"-a", "localhost:8085", "-crypto-key", "/path/to/private.pem"},
 			envParams: map[string]string{},
 			expected: ServerOptions{
 				RunAddr:       "localhost:8085",
@@ -61,6 +64,7 @@ func TestParseOptions(t *testing.T) {
 				ToRestore:     true,
 				DatabaseDsn:   "",
 				HashKey:       "",
+				CryptoKeyPath: "/path/to/private.pem",
 			},
 		},
 		{
@@ -151,6 +155,7 @@ func TestParseOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.HashKey, result.HashKey)
 			assert.Equal(t, tt.expected.AuditFilePath, result.AuditFilePath)
 			assert.Equal(t, tt.expected.AuditURL, result.AuditURL)
+			assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
 		})
 	}
 }

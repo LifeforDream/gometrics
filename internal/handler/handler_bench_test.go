@@ -14,7 +14,6 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 // benchBatch строит батч метрик того же размера, что типичный отчёт
@@ -26,14 +25,14 @@ func benchBatch(n int) []models.Metrics {
 			batch = append(batch, models.Metrics{
 				ID:    "PollCount",
 				MType: models.Counter,
-				Delta: utils.IntPtr(int64(i)),
+				Delta: new(int64(i)),
 			})
 			continue
 		}
 		batch = append(batch, models.Metrics{
 			ID:    "GaugeMetric",
 			MType: models.Gauge,
-			Value: utils.FloatPtr(float64(i) * 1.5),
+			Value: new(float64(i) * 1.5),
 		})
 	}
 	return batch

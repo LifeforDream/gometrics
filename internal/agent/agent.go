@@ -5,12 +5,13 @@ package agent
 
 import (
 	"context"
+	"crypto/rsa"
 
 	"go.uber.org/zap"
 )
 
-// AgentMetric — одна собранная метрика перед отправкой на сервер.
-type AgentMetric struct {
+// agentMetric — одна собранная метрика перед отправкой на сервер.
+type agentMetric struct {
 	Type  string
 	Value float64
 }
@@ -23,6 +24,7 @@ type Config struct {
 	ServerAddr         string
 	HashKey            string
 	ConcurrentRequests int
+	PublicKey          *rsa.PublicKey
 }
 
 // Agent запускает сбор и отправку метрик согласно переданной Config.
@@ -39,7 +41,15 @@ func New(cfg Config) *Agent {
 // collect пишет снятые метрики, send читает и отправляет их батчами.
 // Обе горутины завершаются по ctx.Done().
 func (a *Agent) Run(ctx context.Context, logger *zap.Logger) {
-	c := make(chan map[string]AgentMetric, 1)
+	c := make(chan map[string]agentMetric, 1)
 	go collect(ctx, a.cfg.PollInterval, c, logger)
-	go send(ctx, logger, a.cfg.ReportInterval, c, a.cfg.ServerAddr, a.cfg.HashKey, a.cfg.ConcurrentRequests)
+	go send(ctx, SendParams{
+		logger:        logger,
+		interval:      a.cfg.ReportInterval,
+		c:             c,
+		serverAddress: a.cfg.ServerAddr,
+		hashKey:       a.cfg.HashKey,
+		concreqs:      a.cfg.ConcurrentRequests,
+		publicKey:     a.cfg.PublicKey,
+	})
 }
