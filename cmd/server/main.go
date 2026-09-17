@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"log"
 	"net/http"
 	"os"
@@ -15,10 +16,12 @@ import (
 
 	"github.com/LifeforDream/gometrics/internal/audit"
 	"github.com/LifeforDream/gometrics/internal/buildinfo"
+	"github.com/LifeforDream/gometrics/internal/crypto"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
+	"github.com/LifeforDream/gometrics/internal/middlewares/mwcrypto"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwhash"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwip"
 	"github.com/LifeforDream/gometrics/internal/repository"
@@ -92,11 +95,27 @@ func main() {
 		}
 	}
 
+	var privateKey *rsa.PrivateKey
+	if serverOptions.CryptoKeyPath != "" {
+		privateKey, err = crypto.LoadPrivateKey(serverOptions.CryptoKeyPath)
+		if err != nil {
+			logger.Fatal("Error loading private key with configured path", zap.String("crypto-path", serverOptions.CryptoKeyPath), zap.Error(err))
+		}
+	}
+
 	svc := service.NewMetricService(repo, auditor)
 	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
-		Addr:    serverOptions.RunAddr,
-		Handler: router.MetricsRouter(h, logs.WithLogging(logger), mwip.WithClientIP, mwhash.WithHash(serverOptions.HashKey, logger), middleware.StripSlashes, mwcompress.Compress(logger)),
+		Addr: serverOptions.RunAddr,
+		Handler: router.MetricsRouter(
+			h,
+			logs.WithLogging(logger),
+			mwip.WithClientIP,
+			mwhash.WithHash(serverOptions.HashKey, logger),
+			mwcrypto.WithCrypto(privateKey, logger),
+			middleware.StripSlashes,
+			mwcompress.Compress(logger),
+		),
 	}
 
 	serverErr := make(chan error, 1)

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,33 +15,45 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/LifeforDream/gometrics/internal/compress"
+	"github.com/LifeforDream/gometrics/internal/crypto"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
-func send(ctx context.Context, logger *zap.Logger, interval int, c chan map[string]AgentMetric, serverAddress, hashKey string, concreqs int) {
+// SendParams хранит параметры для запуска функции send() агента
+type SendParams struct {
+	logger        *zap.Logger
+	interval      int
+	c             chan map[string]agentMetric
+	serverAddress string
+	hashKey       string
+	concreqs      int
+	publicKey     *rsa.PublicKey
+}
+
+func send(ctx context.Context, params SendParams) {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 3
-	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
+	retryClient.Backoff = func(_, _ time.Duration, attemptNum int, _ *http.Response) time.Duration {
 		return time.Duration(2*attemptNum+1) * time.Second
 	}
 	retryClient.Logger = nil
 	client := retryClient.StandardClient()
 
-	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	ticker := time.NewTicker(time.Duration(params.interval) * time.Second)
 	defer ticker.Stop()
 
-	workChan := make(chan map[string]AgentMetric, concreqs)
+	workChan := make(chan map[string]agentMetric, params.concreqs)
 
-	for range concreqs {
-		go worker(ctx, logger, workChan, serverAddress, hashKey, client)
+	for range params.concreqs {
+		go worker(ctx, workChan, client, params)
 	}
 
 	for {
 		select {
 		case <-ticker.C:
 			select {
-			case metrics := <-c:
+			case metrics := <-params.c:
 				workChan <- metrics
 			case <-ctx.Done():
 				return
@@ -51,13 +64,13 @@ func send(ctx context.Context, logger *zap.Logger, interval int, c chan map[stri
 	}
 }
 
-func worker(ctx context.Context, logger *zap.Logger, c chan map[string]AgentMetric, serverAddress, hashKey string, client *http.Client) {
+func worker(ctx context.Context, c chan map[string]agentMetric, client *http.Client, params SendParams) {
 	for {
 		select {
 		case metrics := <-c:
-			err := sendMetricBatch(metrics, serverAddress, hashKey, client)
+			err := sendMetricBatch(metrics, client, params)
 			if err != nil {
-				logger.Error("Error sending metrics batch", zap.Error(err))
+				params.logger.Error("Error sending metrics batch", zap.Error(err))
 			}
 		case <-ctx.Done():
 			return
@@ -65,7 +78,7 @@ func worker(ctx context.Context, logger *zap.Logger, c chan map[string]AgentMetr
 	}
 }
 
-func sendMetricBatch(metrics map[string]AgentMetric, serverAddress, hashKey string, client *http.Client) error {
+func sendMetricBatch(metrics map[string]agentMetric, client *http.Client, params SendParams) error {
 	var buf bytes.Buffer
 	var payload []models.Metrics
 	for k, v := range metrics {
@@ -88,35 +101,48 @@ func sendMetricBatch(metrics map[string]AgentMetric, serverAddress, hashKey stri
 		return nil
 	}
 
-	d, err := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("error marshalling data: %w", err)
 	}
 
 	zw, err := compress.NewWriter(&buf)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating compressor: %w", err)
 	}
 
-	_, err = zw.Write(d)
+	_, err = zw.Write(jsonData)
 	if err != nil {
-		return err
+		return fmt.Errorf("error writing compressed data: %w", err)
 	}
 
 	err = zw.Close()
 	if err != nil {
-		return err
+		return fmt.Errorf("error closing compress writer: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, serverAddress+"/updates", &buf)
+	var encData []byte
+	if params.publicKey != nil {
+		rawData, err := io.ReadAll(&buf)
+		if err != nil {
+			return fmt.Errorf("error reading data for signing: %w", err)
+		}
+		encData, err = crypto.Encrypt(params.publicKey, rawData)
+		if err != nil {
+			return fmt.Errorf("error encrypting data: %w", err)
+		}
+		buf = *bytes.NewBuffer(encData)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, params.serverAddress+"/updates", &buf)
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Content-Encoding", "gzip")
 	request.Header.Set("Content-Type", "application/json")
 
-	if hashKey != "" {
-		hash := utils.GenSHA256(buf.Bytes(), hashKey)
+	if params.hashKey != "" {
+		hash := utils.GenSHA256(buf.Bytes(), params.hashKey)
 		request.Header.Set(utils.HashHeaderName, hex.EncodeToString(hash))
 	}
 

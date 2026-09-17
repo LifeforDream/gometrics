@@ -22,7 +22,8 @@ type AgentOptions struct {
 	// HashKey — ключ HMAC-подписи тела запроса; флаг -k, по умолчанию ""
 	HashKey string `env:"KEY"`
 	// ConcurrentRequests — максимум одновременных запросов к серверу; флаг -l, по умолчанию 1
-	ConcurrentRequests int `env:"RATE_LIMIT"`
+	ConcurrentRequests int    `env:"RATE_LIMIT"`
+	CryptoKeyPath      string `env:"CRYPTO_KEY"` // путь к файлу с публичным ключом для шифрования запросов
 }
 
 func parseOptions(args ...string) (*AgentOptions, error) {
@@ -35,6 +36,7 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	fs.IntVar(&agentOptions.ReportInterval, "r", 10, "report interval in seconds")
 	fs.StringVar(&agentOptions.HashKey, "k", "", "hash key")
 	fs.IntVar(&agentOptions.ConcurrentRequests, "l", 1, "max number of concurrent requests to server")
+	fs.StringVar(&agentOptions.CryptoKeyPath, "crypto-key", "", "filepath to a public key storage")
 
 	if args == nil {
 		args = os.Args[1:]

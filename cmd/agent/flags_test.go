@@ -68,8 +68,8 @@ func TestEnvFlagOrder(t *testing.T) {
 	}{
 		{
 			name:      "all envs overwrite flags",
-			args:      []string{"-a", "localhost:8080", "--secure", "-p", "2", "-r", "10", "-k", "sec", "-l", "1"},
-			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11", "KEY": "secret", "RATE_LIMIT": "2"},
+			args:      []string{"-a", "localhost:8080", "--secure", "-p", "2", "-r", "10", "-k", "sec", "-l", "1", "-crypto-key", "/path/from/flag.pem"},
+			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11", "KEY": "secret", "RATE_LIMIT": "2", "CRYPTO_KEY": "/path/from/env.pem"},
 			expected: AgentOptions{
 				Address:            "localhost:8082",
 				Secure:             true,
@@ -77,6 +77,7 @@ func TestEnvFlagOrder(t *testing.T) {
 				ReportInterval:     11,
 				HashKey:            "secret",
 				ConcurrentRequests: 2,
+				CryptoKeyPath:      "/path/from/env.pem",
 			},
 			wantErr: false,
 		},
@@ -96,7 +97,7 @@ func TestEnvFlagOrder(t *testing.T) {
 		},
 		{
 			name:      "envs don't overwrite when empty",
-			args:      []string{"-a", "localhost:8080", "--secure", "-p", "1", "-r", "2"},
+			args:      []string{"-a", "localhost:8080", "--secure", "-p", "1", "-r", "2", "-crypto-key", "/path/to/cert.pem"},
 			envParams: map[string]string{},
 			expected: AgentOptions{
 				Address:            "localhost:8080",
@@ -105,6 +106,7 @@ func TestEnvFlagOrder(t *testing.T) {
 				ReportInterval:     2,
 				HashKey:            "",
 				ConcurrentRequests: 1,
+				CryptoKeyPath:      "/path/to/cert.pem",
 			},
 			wantErr: false,
 		},
@@ -163,6 +165,7 @@ func TestEnvFlagOrder(t *testing.T) {
 				assert.Equal(t, tt.expected.Secure, result.Secure)
 				assert.Equal(t, tt.expected.HashKey, result.HashKey)
 				assert.Equal(t, tt.expected.ConcurrentRequests, result.ConcurrentRequests)
+				assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
 			}
 		})
 	}
