@@ -40,8 +40,7 @@ func WithRetryPG(ctx context.Context, op func() error) error {
 // дедлока (класс 40) и "cannot connect now" (57P03); для прочих pgconn.PgError
 // и любых остальных ошибок — false.
 func IsRetriablePgError(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch pgErr.Code {
 		// Класс 08 - Ошибки соединения
 		case pgerrcode.ConnectionException,

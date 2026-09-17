@@ -33,8 +33,8 @@ func TestSendMetricBatch(t *testing.T) {
 				"pollcount": {Type: models.Counter, Value: 3},
 			},
 			wantPayload: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			hashKey:    "",
 			hitsServer: true,
@@ -57,8 +57,8 @@ func TestSendMetricBatch(t *testing.T) {
 				"pollcount": {Type: models.Counter, Value: 3},
 			},
 			wantPayload: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			hashKey:    "somekey",
 			hitsServer: true,
