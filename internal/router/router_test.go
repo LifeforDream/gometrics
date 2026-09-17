@@ -121,6 +121,7 @@ func TestUpdatesEndToEndWithHashAndCrypto(t *testing.T) {
 		require.NoError(t, err)
 
 		resp := postUpdates(t, ciphertext)
+		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		status, body := getMetricValue(t, "gauge", "alloc")
@@ -136,6 +137,8 @@ func TestUpdatesEndToEndWithHashAndCrypto(t *testing.T) {
 		gz := gzipJSON(t, payload)
 
 		resp := postUpdates(t, gz)
+		defer resp.Body.Close()
+
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }
