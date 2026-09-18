@@ -11,7 +11,6 @@ import (
 
 	models "github.com/LifeforDream/gometrics/internal/model"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 func TestSaveLoadMetrics(t *testing.T) {
@@ -22,8 +21,8 @@ func TestSaveLoadMetrics(t *testing.T) {
 		{
 			name: "gauge and counter round-trip",
 			metrics: map[string]models.Metrics{
-				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(42)},
+				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: new(1.25)},
+				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: new(int64(42))},
 			},
 		},
 		{
@@ -89,12 +88,12 @@ func TestNewFileStorage(t *testing.T) {
 			name:    "restore=true loads existing file",
 			restore: true,
 			preloadMetrics: map[string]models.Metrics{
-				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(5)},
-				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(2.5)},
+				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: new(int64(5))},
+				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: new(2.5)},
 			},
 			wantMetrics: map[string]models.Metrics{
-				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(5)},
-				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(2.5)},
+				"PollCount": {ID: "PollCount", MType: models.Counter, Delta: new(int64(5))},
+				"Alloc":     {ID: "Alloc", MType: models.Gauge, Value: new(2.5)},
 			},
 		},
 		{
@@ -129,21 +128,21 @@ func TestFileBackedUpdateMetricsSyncMode(t *testing.T) {
 			name: "gauge and counter persisted immediately",
 			input: []models.Metrics{
 				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			want: map[string]models.Metrics{
 				"alloc":     {ID: "alloc", MType: models.Gauge, Value: new(1.25)},
-				"pollcount": {ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				"pollcount": {ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 		},
 		{
 			name:  "counter accumulates and persists",
-			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(2)}},
+			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: new(int64(2))}},
 			input: []models.Metrics{
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			want: map[string]models.Metrics{
-				"pollcount": {ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(5)},
+				"pollcount": {ID: "pollcount", MType: models.Counter, Delta: new(int64(5))},
 			},
 		},
 		{
@@ -198,8 +197,8 @@ func TestMemUpdateMetrics(t *testing.T) {
 		{
 			name: "mixed gauge and counter applied",
 			input: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			verify: func(t *testing.T, repo *MemStorage) {
 				g, err := repo.GetMetric(context.Background(), "alloc")
@@ -213,9 +212,9 @@ func TestMemUpdateMetrics(t *testing.T) {
 		},
 		{
 			name:  "counter accumulates over existing value",
-			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(2)}},
+			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: new(int64(2))}},
 			input: []models.Metrics{
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			verify: func(t *testing.T, repo *MemStorage) {
 				c, err := repo.GetMetric(context.Background(), "pollcount")
@@ -225,15 +224,15 @@ func TestMemUpdateMetrics(t *testing.T) {
 		},
 		{
 			name:    "unknown metric type returns error",
-			input:   []models.Metrics{{ID: "bad", MType: "invalid", Value: utils.FloatPtr(1.0)}},
+			input:   []models.Metrics{{ID: "bad", MType: "invalid", Value: new(1.0)}},
 			wantErr: true,
 		},
 		{
 			name: "error short-circuits: subsequent metrics not applied",
 			input: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "bad", MType: "invalid", Value: utils.FloatPtr(1.0)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(5)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "bad", MType: "invalid", Value: new(1.0)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(5))},
 			},
 			wantErr: true,
 			verify: func(t *testing.T, repo *MemStorage) {

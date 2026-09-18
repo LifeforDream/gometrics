@@ -16,13 +16,13 @@ func TestBuildPsUtilSnapshot(t *testing.T) {
 		name        string
 		memStat     *mem.VirtualMemoryStat
 		cpuData     []float64
-		wantMetrics map[string]AgentMetric
+		wantMetrics map[string]agentMetric
 	}{
 		{
 			name:    "memory only no CPUs",
 			memStat: &mem.VirtualMemoryStat{Total: 8192, Free: 2048},
 			cpuData: []float64{},
-			wantMetrics: map[string]AgentMetric{
+			wantMetrics: map[string]agentMetric{
 				"TotalMemory": {Type: models.Gauge, Value: 8192},
 				"FreeMemory":  {Type: models.Gauge, Value: 2048},
 			},
@@ -31,7 +31,7 @@ func TestBuildPsUtilSnapshot(t *testing.T) {
 			name:    "single CPU core",
 			memStat: &mem.VirtualMemoryStat{Total: 1000, Free: 500},
 			cpuData: []float64{42.5},
-			wantMetrics: map[string]AgentMetric{
+			wantMetrics: map[string]agentMetric{
 				"TotalMemory":     {Type: models.Gauge, Value: 1000},
 				"FreeMemory":      {Type: models.Gauge, Value: 500},
 				"CPUutilization1": {Type: models.Gauge, Value: 42.5},
@@ -41,7 +41,7 @@ func TestBuildPsUtilSnapshot(t *testing.T) {
 			name:    "multiple CPU cores indexed correctly",
 			memStat: &mem.VirtualMemoryStat{Total: 4096, Free: 1024},
 			cpuData: []float64{10.0, 20.0, 30.0, 40.0},
-			wantMetrics: map[string]AgentMetric{
+			wantMetrics: map[string]agentMetric{
 				"TotalMemory":     {Type: models.Gauge, Value: 4096},
 				"FreeMemory":      {Type: models.Gauge, Value: 1024},
 				"CPUutilization1": {Type: models.Gauge, Value: 10.0},
@@ -54,7 +54,7 @@ func TestBuildPsUtilSnapshot(t *testing.T) {
 			name:    "zero memory values",
 			memStat: &mem.VirtualMemoryStat{},
 			cpuData: []float64{},
-			wantMetrics: map[string]AgentMetric{
+			wantMetrics: map[string]agentMetric{
 				"TotalMemory": {Type: models.Gauge, Value: 0},
 				"FreeMemory":  {Type: models.Gauge, Value: 0},
 			},
@@ -109,7 +109,7 @@ func TestBuildMemStatsSnapshot(t *testing.T) {
 		"RandomValue",
 	}
 	var memStats runtime.MemStats
-	var res map[string]AgentMetric
+	var res map[string]agentMetric
 
 	runtime.ReadMemStats(&memStats)
 	res = buildMemStatsSnapshot(memStats, 0)

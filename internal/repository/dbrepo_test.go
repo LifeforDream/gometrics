@@ -12,7 +12,6 @@ import (
 
 	models "github.com/LifeforDream/gometrics/internal/model"
 	myErrors "github.com/LifeforDream/gometrics/internal/model/errors"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 func TestDbGetAllSlice(t *testing.T) {
@@ -34,14 +33,14 @@ func TestDbGetAllSlice(t *testing.T) {
 			name: "gauge and counter",
 			setup: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows([]string{"ID", "MType", "Delta", "Value", "Hash"}).
-					AddRow("alloc", "gauge", nil, utils.FloatPtr(1.25), "").
-					AddRow("pollcount", "counter", utils.IntPtr(5), nil, "")
+					AddRow("alloc", "gauge", nil, new(1.25), "").
+					AddRow("pollcount", "counter", new(int64(5)), nil, "")
 				mock.ExpectQuery("SELECT id, mtype, delta, value, hash FROM metrics").
 					WillReturnRows(rows)
 			},
 			want: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(5)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(5))},
 			},
 		},
 		{
@@ -99,9 +98,9 @@ func TestDbGetMetric(t *testing.T) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT id, mtype, delta, value, hash FROM metrics WHERE id = $1")).
 					WithArgs("alloc").
 					WillReturnRows(pgxmock.NewRows([]string{"ID", "MType", "Delta", "Value", "Hash"}).
-						AddRow("alloc", "gauge", nil, utils.FloatPtr(1.25), ""))
+						AddRow("alloc", "gauge", nil, new(1.25), ""))
 			},
-			want: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
+			want: models.Metrics{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
 		},
 		{
 			name:       "found counter",
@@ -110,9 +109,9 @@ func TestDbGetMetric(t *testing.T) {
 				mock.ExpectQuery(regexp.QuoteMeta("SELECT id, mtype, delta, value, hash FROM metrics WHERE id = $1")).
 					WithArgs("pollcount").
 					WillReturnRows(pgxmock.NewRows([]string{"ID", "MType", "Delta", "Value", "Hash"}).
-						AddRow("pollcount", "counter", utils.IntPtr(5), nil, ""))
+						AddRow("pollcount", "counter", new(int64(5)), nil, ""))
 			},
-			want: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(5)},
+			want: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: new(int64(5))},
 		},
 		{
 			name:       "not found",
@@ -158,7 +157,7 @@ func TestDbSetGauge(t *testing.T) {
 	}{
 		{
 			name:   "insert new gauge",
-			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
+			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
@@ -169,7 +168,7 @@ func TestDbSetGauge(t *testing.T) {
 		},
 		{
 			name:   "update existing gauge replaces value",
-			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(2.5)},
+			metric: models.Metrics{ID: "alloc", MType: models.Gauge, Value: new(2.5)},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
@@ -180,7 +179,7 @@ func TestDbSetGauge(t *testing.T) {
 		},
 		{
 			name:   "type conflict with existing counter",
-			metric: models.Metrics{ID: "pollcount", MType: models.Gauge, Value: utils.FloatPtr(1.0)},
+			metric: models.Metrics{ID: "pollcount", MType: models.Gauge, Value: new(1.0)},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value WHERE metrics.mtype = EXCLUDED.mtype")).
@@ -230,7 +229,7 @@ func TestDbUpdateCounter(t *testing.T) {
 	}{
 		{
 			name:   "insert new counter",
-			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(5)},
+			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: new(int64(5))},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
@@ -241,7 +240,7 @@ func TestDbUpdateCounter(t *testing.T) {
 		},
 		{
 			name:   "accumulate existing counter",
-			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+			metric: models.Metrics{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
@@ -252,7 +251,7 @@ func TestDbUpdateCounter(t *testing.T) {
 		},
 		{
 			name:   "type conflict with existing gauge",
-			metric: models.Metrics{ID: "alloc", MType: models.Counter, Delta: utils.IntPtr(1)},
+			metric: models.Metrics{ID: "alloc", MType: models.Counter, Delta: new(int64(1))},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
 				mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics(id, mtype, delta, value, hash) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET delta = metrics.delta + EXCLUDED.delta WHERE metrics.mtype = EXCLUDED.mtype")).
@@ -307,8 +306,8 @@ func TestDbUpdateMetrics(t *testing.T) {
 		{
 			name: "success with gauge and counter",
 			input: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()
@@ -325,8 +324,8 @@ func TestDbUpdateMetrics(t *testing.T) {
 		{
 			name: "type conflict on first metric rolls back",
 			input: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.0)},
-				{ID: "malloc", MType: models.Gauge, Value: utils.FloatPtr(5.0)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.0)},
+				{ID: "malloc", MType: models.Gauge, Value: new(5.0)},
 			},
 			setup: func(mock pgxmock.PgxPoolIface) {
 				mock.ExpectBegin()

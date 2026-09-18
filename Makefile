@@ -29,3 +29,6 @@ clear-genreset:
 
 genreset: clear-genreset
 	go build -o cmd/reset/reset ./cmd/reset && ./cmd/reset/reset
+
+gencert:
+	go build -o cmd/certgen/certgen ./cmd/certgen && ./cmd/certgen/certgen -o . -b 4096
