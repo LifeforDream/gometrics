@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"go.uber.org/zap"
 
@@ -56,10 +57,12 @@ func main() {
 
 	a := agent.New(cfg)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
 	a.Run(ctx, logger)
 
 	<-ctx.Done()
+
+	a.Wait()
 }

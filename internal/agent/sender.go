@@ -8,10 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
+	"sync"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 
 	"github.com/LifeforDream/gometrics/internal/compress"
@@ -29,56 +30,83 @@ type SendParams struct {
 	hashKey       string
 	concreqs      int
 	publicKey     *rsa.PublicKey
+	client        httpSender
+}
+
+type metricHolder struct {
+	m  map[string]agentMetric
+	mu sync.RWMutex
+}
+
+func newMetricHolder() *metricHolder {
+	return &metricHolder{
+		m: make(map[string]agentMetric),
+	}
+}
+
+func (mm *metricHolder) Store(nm map[string]agentMetric) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.m = nm
+}
+
+func (mm *metricHolder) Load() map[string]agentMetric {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	return mm.m
 }
 
 func send(ctx context.Context, params SendParams) {
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 3
-	retryClient.Backoff = func(_, _ time.Duration, attemptNum int, _ *http.Response) time.Duration {
-		return time.Duration(2*attemptNum+1) * time.Second
-	}
-	retryClient.Logger = nil
-	client := retryClient.StandardClient()
+	metricsHolder := newMetricHolder()
+	lastSentMetrics := make(map[string]agentMetric)
 
 	ticker := time.NewTicker(time.Duration(params.interval) * time.Second)
 	defer ticker.Stop()
 
 	workChan := make(chan map[string]agentMetric, params.concreqs)
 
+	var workersWg sync.WaitGroup
+	workersWg.Add(params.concreqs)
 	for range params.concreqs {
-		go worker(ctx, workChan, client, params)
+		go func() { defer workersWg.Done(); worker(workChan, params) }()
 	}
 
-	for {
-		select {
-		case <-ticker.C:
+	var twg sync.WaitGroup
+	twg.Go(func() {
+		for {
 			select {
-			case metrics := <-params.c:
-				workChan <- metrics
+			case <-ticker.C:
+				lastSentMetrics = metricsHolder.Load()
+				workChan <- lastSentMetrics
 			case <-ctx.Done():
 				return
 			}
-		case <-ctx.Done():
-			return
+		}
+	})
+
+	for m := range params.c {
+		metricsHolder.Store(m)
+	}
+	twg.Wait()
+
+	lastBatch := metricsHolder.Load()
+	if !maps.Equal(lastBatch, lastSentMetrics) {
+		workChan <- lastBatch
+	}
+	close(workChan)
+	workersWg.Wait()
+}
+
+func worker(c chan map[string]agentMetric, params SendParams) {
+	for metrics := range c {
+		err := sendMetricBatch(metrics, params)
+		if err != nil {
+			params.logger.Error("Error sending metrics batch", zap.Error(err))
 		}
 	}
 }
 
-func worker(ctx context.Context, c chan map[string]agentMetric, client *http.Client, params SendParams) {
-	for {
-		select {
-		case metrics := <-c:
-			err := sendMetricBatch(metrics, client, params)
-			if err != nil {
-				params.logger.Error("Error sending metrics batch", zap.Error(err))
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func sendMetricBatch(metrics map[string]agentMetric, client *http.Client, params SendParams) error {
+func sendMetricBatch(metrics map[string]agentMetric, params SendParams) error {
 	var buf bytes.Buffer
 	var payload []models.Metrics
 	for k, v := range metrics {
@@ -146,7 +174,7 @@ func sendMetricBatch(metrics map[string]agentMetric, client *http.Client, params
 		request.Header.Set(utils.HashHeaderName, hex.EncodeToString(hash))
 	}
 
-	resp, err := client.Do(request)
+	resp, err := params.client.Do(request)
 	if err != nil {
 		return err
 	}

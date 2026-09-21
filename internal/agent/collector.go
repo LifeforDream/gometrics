@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -109,8 +110,10 @@ func collect(ctx context.Context, interval int, c chan map[string]agentMetric, l
 	colChan := make(chan map[string]agentMetric, 2) // 2 goroutines = 2 slots
 	metricMap := make(map[string]agentMetric)
 
-	go collectMemStats(ctx, interval, colChan)
-	go collectPsUtil(ctx, interval, colChan, logger)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); collectMemStats(ctx, interval, colChan) }()
+	go func() { defer wg.Done(); collectPsUtil(ctx, interval, colChan, logger) }()
 
 	for {
 		select {
@@ -123,6 +126,8 @@ func collect(ctx context.Context, interval int, c chan map[string]agentMetric, l
 			}
 			c <- maps.Clone(metricMap)
 		case <-ctx.Done():
+			wg.Wait()
+			close(c)
 			return
 		}
 	}

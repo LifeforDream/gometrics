@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -47,7 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
 	var (
@@ -127,12 +128,11 @@ func main() {
 	}()
 
 	select {
-	case <-ctx.Done(): //SIGINT
+	case <-ctx.Done():
 	case err := <-serverErr:
 		logger.Fatal("Failed to start application", zap.Error(err))
 	}
 
-	// after SIGINT we give server 5 seconds to cleanup
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = srv.Shutdown(shutdownCtx)
