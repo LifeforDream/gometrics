@@ -30,8 +30,11 @@ func TestRetryableClientRetryMax(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
-		_, err := client.Get("/")
+		resp, err := client.Get("/")
 		require.Error(t, err)
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		if cnt != retries+1 { // 1 initial request + 2 retries
 			t.Errorf("expected 4 requests, got %d", cnt)
 		}
