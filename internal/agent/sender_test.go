@@ -108,7 +108,7 @@ func TestSendMetricBatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotErr := sendMetricBatch(tt.metrics, SendParams{
+			gotErr := sendMetricBatch(context.TODO(), tt.metrics, SendParams{
 				serverAddress: server.URL,
 				hashKey:       tt.hashKey,
 				publicKey:     tt.cryptoPub,
@@ -178,7 +178,7 @@ func TestSendMetricBatchEncryptsWhenCryptoKeyConfigured(t *testing.T) {
 	defer server.Close()
 
 	client := &http.Client{}
-	err = sendMetricBatch(metrics, SendParams{
+	err = sendMetricBatch(context.TODO(), metrics, SendParams{
 		serverAddress: server.URL,
 		publicKey:     pub,
 		client:        client,
@@ -222,7 +222,7 @@ func TestSendMetricBatchWithoutCryptoKeyIsUnchanged(t *testing.T) {
 	defer server.Close()
 
 	client := &http.Client{}
-	err := sendMetricBatch(metrics, SendParams{
+	err := sendMetricBatch(context.TODO(), metrics, SendParams{
 		serverAddress: server.URL,
 		client:        client,
 	})
@@ -274,7 +274,7 @@ func TestWorkerExitsWhenChannelClosed(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			worker(c, SendParams{logger: zap.NewNop(), client: client})
+			worker(context.TODO(), c, SendParams{logger: zap.NewNop(), client: client})
 		}()
 
 		<-done
@@ -320,18 +320,14 @@ func TestSendFlushesFinalBatchAndShutsDownGracefully(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		c := make(chan map[string]agentMetric, 1)
 
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			send(ctx, SendParams{
-				logger:        logger,
-				interval:      3600, // тикеру незачем срабатывать в этом тесте
-				c:             c,
-				serverAddress: "http://fake.invalid",
-				concreqs:      2,
-				client:        client,
-			})
-		}()
+		go send(ctx, SendParams{
+			logger:             logger,
+			interval:           3600, // тикеру незачем срабатывать в этом тесте
+			metricsChannel:     c,
+			serverAddress:      "http://fake.invalid",
+			concurrentRequests: 2,
+			client:             client,
+		})
 
 		// последний снимок метрик перед остановкой продюсера (аналог collect,
 		// закрывающего канал после ctx.Done())
@@ -339,14 +335,12 @@ func TestSendFlushesFinalBatchAndShutsDownGracefully(t *testing.T) {
 		cancel()
 		close(c)
 
-		<-done
-
 		var got []models.Metrics
 		body := <-bodyCh
 		require.NoError(t, json.Unmarshal(body, &got))
 		assert.ElementsMatch(t, []models.Metrics{{ID: "alloc", MType: models.Gauge, Value: new(42.0)}}, got)
 
-		assertNoGoroutineFunc(t, "agent.worker(")
+		synctest.Wait()
 	})
 }
 
@@ -359,7 +353,7 @@ func TestSendNoHTTPCallWhenNothingCollectedBeforeShutdown(t *testing.T) {
 		logger := zap.NewNop()
 
 		hit := make(chan struct{}, 1)
-		client := newFakeClient(func(w http.ResponseWriter, r *http.Request) {
+		client := newFakeClient(func(w http.ResponseWriter, _ *http.Request) {
 			hit <- struct{}{}
 			w.WriteHeader(http.StatusOK)
 		})
@@ -371,12 +365,12 @@ func TestSendNoHTTPCallWhenNothingCollectedBeforeShutdown(t *testing.T) {
 		go func() {
 			defer close(done)
 			send(ctx, SendParams{
-				logger:        logger,
-				interval:      3600,
-				c:             c,
-				serverAddress: "http://fake.invalid",
-				concreqs:      1,
-				client:        client,
+				logger:             logger,
+				interval:           3600,
+				metricsChannel:     c,
+				serverAddress:      "http://fake.invalid",
+				concurrentRequests: 1,
+				client:             client,
 			})
 		}()
 
@@ -401,7 +395,7 @@ func TestSendTickerFiresThenShutsDownWithoutPanic(t *testing.T) {
 	synctest.Test(t, func(_ *testing.T) {
 		logger := zap.NewNop()
 		hits := make(chan struct{}, 8)
-		client := newFakeClient(func(w http.ResponseWriter, r *http.Request) {
+		client := newFakeClient(func(w http.ResponseWriter, _ *http.Request) {
 			hits <- struct{}{}
 			w.WriteHeader(http.StatusOK)
 		})
@@ -414,12 +408,12 @@ func TestSendTickerFiresThenShutsDownWithoutPanic(t *testing.T) {
 		go func() {
 			defer close(done)
 			send(ctx, SendParams{
-				logger:        logger,
-				interval:      1,
-				c:             c,
-				serverAddress: "http://fake.invalid",
-				concreqs:      2,
-				client:        client,
+				logger:             logger,
+				interval:           1,
+				metricsChannel:     c,
+				serverAddress:      "http://fake.invalid",
+				concurrentRequests: 2,
+				client:             client,
 			})
 		}()
 

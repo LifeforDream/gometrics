@@ -63,14 +63,14 @@ func (a *Agent) Run(ctx context.Context, logger *zap.Logger) {
 	go func() {
 		defer a.wg.Done()
 		send(ctx, SendParams{
-			logger:        logger,
-			interval:      a.cfg.ReportInterval,
-			c:             c,
-			serverAddress: a.cfg.ServerAddr,
-			hashKey:       a.cfg.HashKey,
-			concreqs:      a.cfg.ConcurrentRequests,
-			publicKey:     a.cfg.PublicKey,
-			client:        a.cfg.Client,
+			logger:             logger,
+			interval:           a.cfg.ReportInterval,
+			metricsChannel:     c,
+			serverAddress:      a.cfg.ServerAddr,
+			hashKey:            a.cfg.HashKey,
+			concurrentRequests: a.cfg.ConcurrentRequests,
+			publicKey:          a.cfg.PublicKey,
+			client:             a.cfg.Client,
 		})
 	}()
 }

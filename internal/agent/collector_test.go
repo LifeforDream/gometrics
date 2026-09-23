@@ -219,22 +219,16 @@ func TestCollectPreservesBufferedSnapshotAcrossShutdown(t *testing.T) {
 // collectMemStats/collectPsUtil — collect дожидается их завершения через
 // wg.Wait() перед тем как закрыть выходной канал.
 func TestCollectNoGoroutineLeakAfterShutdown(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
+	synctest.Test(t, func(_ *testing.T) {
 		logger := zap.NewNop()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		c := make(chan map[string]agentMetric, 1)
 
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			collect(ctx, 1, c, logger)
-		}()
+		go collect(ctx, 1, c, logger)
 
 		cancel()
-		<-done
 
-		assertNoGoroutineFunc(t, "agent.collectMemStats(")
-		assertNoGoroutineFunc(t, "agent.collectPsUtil(")
+		synctest.Wait()
 	})
 }

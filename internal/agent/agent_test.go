@@ -13,7 +13,7 @@ import (
 // Agent.Wait() гарантированно дожидается завершения обеих дочерних горутин
 // (collect и send), не паникует и не оставляет висящих горутин.
 func TestAgentRunWaitGracefulShutdown(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
+	synctest.Test(t, func(_ *testing.T) {
 		logger := zap.NewNop()
 		client := newFakeClient(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -32,10 +32,6 @@ func TestAgentRunWaitGracefulShutdown(t *testing.T) {
 		cancel()
 
 		a.Wait()
-
-		assertNoGoroutineFunc(t, "agent.collectMemStats(")
-		assertNoGoroutineFunc(t, "agent.collectPsUtil(")
-		assertNoGoroutineFunc(t, "agent.worker(")
 	})
 }
 

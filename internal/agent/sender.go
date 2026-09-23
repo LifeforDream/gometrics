@@ -23,14 +23,14 @@ import (
 
 // SendParams хранит параметры для запуска функции send() агента
 type SendParams struct {
-	logger        *zap.Logger
-	interval      int
-	c             chan map[string]agentMetric
-	serverAddress string
-	hashKey       string
-	concreqs      int
-	publicKey     *rsa.PublicKey
-	client        httpSender
+	logger             *zap.Logger
+	interval           int
+	metricsChannel     chan map[string]agentMetric
+	serverAddress      string
+	hashKey            string
+	concurrentRequests int
+	publicKey          *rsa.PublicKey
+	client             httpSender
 }
 
 type metricHolder struct {
@@ -63,12 +63,12 @@ func send(ctx context.Context, params SendParams) {
 	ticker := time.NewTicker(time.Duration(params.interval) * time.Second)
 	defer ticker.Stop()
 
-	workChan := make(chan map[string]agentMetric, params.concreqs)
+	workChan := make(chan map[string]agentMetric, params.concurrentRequests)
 
 	var workersWg sync.WaitGroup
-	workersWg.Add(params.concreqs)
-	for range params.concreqs {
-		go func() { defer workersWg.Done(); worker(workChan, params) }()
+	workersWg.Add(params.concurrentRequests)
+	for range params.concurrentRequests {
+		go func() { defer workersWg.Done(); worker(ctx, workChan, params) }()
 	}
 
 	var twg sync.WaitGroup
@@ -84,7 +84,7 @@ func send(ctx context.Context, params SendParams) {
 		}
 	})
 
-	for m := range params.c {
+	for m := range params.metricsChannel {
 		metricsHolder.Store(m)
 	}
 	twg.Wait()
@@ -97,16 +97,16 @@ func send(ctx context.Context, params SendParams) {
 	workersWg.Wait()
 }
 
-func worker(c chan map[string]agentMetric, params SendParams) {
+func worker(ctx context.Context, c chan map[string]agentMetric, params SendParams) {
 	for metrics := range c {
-		err := sendMetricBatch(metrics, params)
+		err := sendMetricBatch(ctx, metrics, params)
 		if err != nil {
 			params.logger.Error("Error sending metrics batch", zap.Error(err))
 		}
 	}
 }
 
-func sendMetricBatch(metrics map[string]agentMetric, params SendParams) error {
+func sendMetricBatch(ctx context.Context, metrics map[string]agentMetric, params SendParams) error {
 	var buf bytes.Buffer
 	var payload []models.Metrics
 	for k, v := range metrics {
@@ -149,20 +149,15 @@ func sendMetricBatch(metrics map[string]agentMetric, params SendParams) error {
 		return fmt.Errorf("error closing compress writer: %w", err)
 	}
 
-	var encData []byte
+	reqData := buf.Bytes()
 	if params.publicKey != nil {
-		rawData, err := io.ReadAll(&buf)
-		if err != nil {
-			return fmt.Errorf("error reading data for signing: %w", err)
-		}
-		encData, err = crypto.Encrypt(params.publicKey, rawData)
+		reqData, err = crypto.Encrypt(params.publicKey, reqData)
 		if err != nil {
 			return fmt.Errorf("error encrypting data: %w", err)
 		}
-		buf = *bytes.NewBuffer(encData)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, params.serverAddress+"/updates", &buf)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, params.serverAddress+"/updates", bytes.NewBuffer(reqData))
 	if err != nil {
 		return err
 	}
@@ -170,7 +165,7 @@ func sendMetricBatch(metrics map[string]agentMetric, params SendParams) error {
 	request.Header.Set("Content-Type", "application/json")
 
 	if params.hashKey != "" {
-		hash := utils.GenSHA256(buf.Bytes(), params.hashKey)
+		hash := utils.GenSHA256(reqData, params.hashKey)
 		request.Header.Set(utils.HashHeaderName, hex.EncodeToString(hash))
 	}
 

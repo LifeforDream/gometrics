@@ -26,7 +26,11 @@ func LoadPublicKey(path string) (*rsa.PublicKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error while parsing certificate: %w", err)
 	}
-	return certificate.PublicKey.(*rsa.PublicKey), nil
+	cert, ok := certificate.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("public key is not RSA")
+	}
+	return cert, nil
 }
 
 // LoadPrivateKey читает приватный ключ из файла

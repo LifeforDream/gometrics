@@ -56,35 +56,41 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 		args = os.Args[1:]
 	}
 
-	// Путь к файлу конфигурации нужно определить до объявления остальных
-	// флагов: ADDRESS/RESTORE и т.д. ещё не зарегистрированы на этом этапе,
-	// поэтому полноценный flag.FlagSet использовать нельзя.
-	var cfg fileConfig
-	if path := config.ResolveConfigPath(args); path != "" {
-		loaded, err := config.ReadConfigFile[fileConfig](path)
-		if err != nil {
-			return nil, fmt.Errorf("error reading config from file: %w", err)
-		}
-		cfg = *loaded
-	}
-
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
-	fs.StringVar(&serverOptions.RunAddr, "a", config.StrOr(cfg.RunAddr, "localhost:8080"), "address and port to run server")
-	fs.StringVar(&serverOptions.LogLevel, "l", config.StrOr(cfg.LogLevel, "info"), "log level")
-	fs.IntVar(&serverOptions.StoreInterval, "i", config.IntOr(cfg.StoreInterval, 300), "interval to store current values on disk")
-	fs.StringVar(&serverOptions.FileStorePath, "f", config.StrOr(cfg.FileStorePath, ""), "path to metrics storage on disk")
-	fs.BoolVar(&serverOptions.ToRestore, "r", config.BoolOr(cfg.ToRestore, true), "signal to restore metrics values from disk")
-	fs.StringVar(&serverOptions.DatabaseDsn, "d", config.StrOr(cfg.DatabaseDsn, ""), "connection string to connect to database")
-	fs.StringVar(&serverOptions.HashKey, "k", config.StrOr(cfg.HashKey, ""), "hash key")
-	fs.StringVar(&serverOptions.AuditFilePath, "audit-file", config.StrOr(cfg.AuditFilePath, ""), "filepath to save audit logs to")
-	fs.StringVar(&serverOptions.AuditURL, "audit-url", config.StrOr(cfg.AuditURL, ""), "url to send audit logs to")
-	fs.StringVar(&serverOptions.CryptoKeyPath, "crypto-key", config.StrOr(cfg.CryptoKeyPath, ""), "filepath to a private key storage")
+	fs.StringVar(&serverOptions.RunAddr, "a", "localhost:8080", "address and port to run server")
+	fs.StringVar(&serverOptions.LogLevel, "l", "info", "log level")
+	fs.IntVar(&serverOptions.StoreInterval, "i", 300, "interval to store current values on disk")
+	fs.StringVar(&serverOptions.FileStorePath, "f", "", "path to metrics storage on disk")
+	fs.BoolVar(&serverOptions.ToRestore, "r", true, "signal to restore metrics values from disk")
+	fs.StringVar(&serverOptions.DatabaseDsn, "d", "", "connection string to connect to database")
+	fs.StringVar(&serverOptions.HashKey, "k", "", "hash key")
+	fs.StringVar(&serverOptions.AuditFilePath, "audit-file", "", "filepath to save audit logs to")
+	fs.StringVar(&serverOptions.AuditURL, "audit-url", "", "url to send audit logs to")
+	fs.StringVar(&serverOptions.CryptoKeyPath, "crypto-key", "", "filepath to a private key storage")
 	fs.StringVar(&serverOptions.ConfigFilename, "c", "", "filepath to .json file with configuration options")
 	fs.StringVar(&serverOptions.ConfigFilename, "config", "", "same as -c")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %w", err)
+	}
+
+	// CONFIG может быть в энве, и его нужно читать в первую очередь
+	configPath := serverOptions.ConfigFilename
+	if v, ok := os.LookupEnv("CONFIG"); ok && v != "" {
+		configPath = v
+	}
+
+	if configPath != "" {
+		cfg, err := config.ReadConfigFile[fileConfig](configPath)
+		if err != nil {
+			return nil, fmt.Errorf("error reading config from file: %w", err)
+		}
+
+		explicit := make(map[string]bool)
+		fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+
+		applyFileConfig(&serverOptions, cfg, explicit)
 	}
 
 	err := env.Parse(&serverOptions)
@@ -93,4 +99,39 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 	}
 
 	return &serverOptions, nil
+}
+
+// applyFileConfig переносит значения из fileConfig в serverOptions только для
+// флагов, не заданных явно. Заданные явно передаются в аргументе explicit.
+func applyFileConfig(opts *ServerOptions, cfg *fileConfig, explicit map[string]bool) {
+	if cfg.RunAddr != nil && !explicit["a"] {
+		opts.RunAddr = *cfg.RunAddr
+	}
+	if cfg.LogLevel != nil && !explicit["l"] {
+		opts.LogLevel = *cfg.LogLevel
+	}
+	if cfg.StoreInterval != nil && !explicit["i"] {
+		opts.StoreInterval = *cfg.StoreInterval
+	}
+	if cfg.FileStorePath != nil && !explicit["f"] {
+		opts.FileStorePath = *cfg.FileStorePath
+	}
+	if cfg.ToRestore != nil && !explicit["r"] {
+		opts.ToRestore = *cfg.ToRestore
+	}
+	if cfg.DatabaseDsn != nil && !explicit["d"] {
+		opts.DatabaseDsn = *cfg.DatabaseDsn
+	}
+	if cfg.HashKey != nil && !explicit["k"] {
+		opts.HashKey = *cfg.HashKey
+	}
+	if cfg.AuditFilePath != nil && !explicit["audit-file"] {
+		opts.AuditFilePath = *cfg.AuditFilePath
+	}
+	if cfg.AuditURL != nil && !explicit["audit-url"] {
+		opts.AuditURL = *cfg.AuditURL
+	}
+	if cfg.CryptoKeyPath != nil && !explicit["crypto-key"] {
+		opts.CryptoKeyPath = *cfg.CryptoKeyPath
+	}
 }

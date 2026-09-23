@@ -51,24 +51,15 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 		args = os.Args[1:]
 	}
 
-	var cfg fileConfig
-	if path := config.ResolveConfigPath(args); path != "" {
-		loaded, err := config.ReadConfigFile[fileConfig](path)
-		if err != nil {
-			return nil, fmt.Errorf("error reading config from file: %w", err)
-		}
-		cfg = *loaded
-	}
-
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
-	fs.StringVar(&agentOptions.Address, "a", config.StrOr(cfg.Address, "localhost:8080"), "server address")
-	fs.BoolVar(&agentOptions.Secure, "secure", config.BoolOr(cfg.Secure, false), "flag to indicate usage of secure channel")
-	fs.IntVar(&agentOptions.PollInterval, "p", config.IntOr(cfg.PollInterval, 2), "poll interval in seconds")
-	fs.IntVar(&agentOptions.ReportInterval, "r", config.IntOr(cfg.ReportInterval, 10), "report interval in seconds")
-	fs.StringVar(&agentOptions.HashKey, "k", config.StrOr(cfg.HashKey, ""), "hash key")
-	fs.IntVar(&agentOptions.ConcurrentRequests, "l", config.IntOr(cfg.ConcurrentRequests, 1), "max number of concurrent requests to server")
-	fs.StringVar(&agentOptions.CryptoKeyPath, "crypto-key", config.StrOr(cfg.CryptoKeyPath, ""), "filepath to a public key storage")
+	fs.StringVar(&agentOptions.Address, "a", "localhost:8080", "server address")
+	fs.BoolVar(&agentOptions.Secure, "secure", false, "flag to indicate usage of secure channel")
+	fs.IntVar(&agentOptions.PollInterval, "p", 2, "poll interval in seconds")
+	fs.IntVar(&agentOptions.ReportInterval, "r", 10, "report interval in seconds")
+	fs.StringVar(&agentOptions.HashKey, "k", "", "hash key")
+	fs.IntVar(&agentOptions.ConcurrentRequests, "l", 1, "max number of concurrent requests to server")
+	fs.StringVar(&agentOptions.CryptoKeyPath, "crypto-key", "", "filepath to a public key storage")
 	fs.StringVar(&agentOptions.ConfigFilename, "c", "", "filepath to .json file with configuration options")
 	fs.StringVar(&agentOptions.ConfigFilename, "config", "", "same as -c")
 
@@ -76,8 +67,25 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 		return nil, err
 	}
 
-	err := env.Parse(&agentOptions)
-	if err != nil {
+	// CONFIG может быть в энве, и его нужно читать в первую очередь
+	configPath := agentOptions.ConfigFilename
+	if v, ok := os.LookupEnv("CONFIG"); ok && v != "" {
+		configPath = v
+	}
+
+	if configPath != "" {
+		cfg, err := config.ReadConfigFile[fileConfig](configPath)
+		if err != nil {
+			return nil, fmt.Errorf("error reading config from file: %w", err)
+		}
+
+		explicit := make(map[string]bool)
+		fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+
+		applyFileConfig(&agentOptions, cfg, explicit)
+	}
+
+	if err := env.Parse(&agentOptions); err != nil {
 		return nil, err
 	}
 
@@ -86,6 +94,32 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	}
 
 	return &agentOptions, nil
+}
+
+// applyFileConfig переносит значения из fileConfig в agentOptions только для
+// флагов, не заданных явно. Заданные явно передаются в аргументе explicit.
+func applyFileConfig(opts *AgentOptions, cfg *fileConfig, explicit map[string]bool) {
+	if cfg.Address != nil && !explicit["a"] {
+		opts.Address = *cfg.Address
+	}
+	if cfg.Secure != nil && !explicit["secure"] {
+		opts.Secure = *cfg.Secure
+	}
+	if cfg.PollInterval != nil && !explicit["p"] {
+		opts.PollInterval = *cfg.PollInterval
+	}
+	if cfg.ReportInterval != nil && !explicit["r"] {
+		opts.ReportInterval = *cfg.ReportInterval
+	}
+	if cfg.HashKey != nil && !explicit["k"] {
+		opts.HashKey = *cfg.HashKey
+	}
+	if cfg.ConcurrentRequests != nil && !explicit["l"] {
+		opts.ConcurrentRequests = *cfg.ConcurrentRequests
+	}
+	if cfg.CryptoKeyPath != nil && !explicit["crypto-key"] {
+		opts.CryptoKeyPath = *cfg.CryptoKeyPath
+	}
 }
 
 func constructAddress(agentOptions *AgentOptions) string {
