@@ -3,69 +3,110 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
+	"sync"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"go.uber.org/zap"
 
 	"github.com/LifeforDream/gometrics/internal/compress"
+	"github.com/LifeforDream/gometrics/internal/crypto"
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
-func send(ctx context.Context, logger *zap.Logger, interval int, c chan map[string]AgentMetric, serverAddress, hashKey string, concreqs int) {
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 3
-	retryClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
-		return time.Duration(2*attemptNum+1) * time.Second
-	}
-	retryClient.Logger = nil
-	client := retryClient.StandardClient()
+// SendParams хранит параметры для запуска функции send() агента
+type SendParams struct {
+	logger             *zap.Logger
+	interval           int
+	metricsChannel     chan map[string]agentMetric
+	serverAddress      string
+	hashKey            string
+	concurrentRequests int
+	publicKey          *rsa.PublicKey
+	client             httpSender
+}
 
-	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+type metricHolder struct {
+	m  map[string]agentMetric
+	mu sync.RWMutex
+}
+
+func newMetricHolder() *metricHolder {
+	return &metricHolder{
+		m: make(map[string]agentMetric),
+	}
+}
+
+func (mm *metricHolder) Store(nm map[string]agentMetric) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.m = nm
+}
+
+func (mm *metricHolder) Load() map[string]agentMetric {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	return mm.m
+}
+
+func send(ctx context.Context, params SendParams) {
+	metricsHolder := newMetricHolder()
+	lastSentMetrics := make(map[string]agentMetric)
+
+	ticker := time.NewTicker(time.Duration(params.interval) * time.Second)
 	defer ticker.Stop()
 
-	workChan := make(chan map[string]AgentMetric, concreqs)
+	workChan := make(chan map[string]agentMetric, params.concurrentRequests)
 
-	for range concreqs {
-		go worker(ctx, logger, workChan, serverAddress, hashKey, client)
+	var workersWg sync.WaitGroup
+	workersWg.Add(params.concurrentRequests)
+	for range params.concurrentRequests {
+		go func() { defer workersWg.Done(); worker(ctx, workChan, params) }()
 	}
 
-	for {
-		select {
-		case <-ticker.C:
+	var twg sync.WaitGroup
+	twg.Go(func() {
+		for {
 			select {
-			case metrics := <-c:
-				workChan <- metrics
+			case <-ticker.C:
+				lastSentMetrics = metricsHolder.Load()
+				workChan <- lastSentMetrics
 			case <-ctx.Done():
 				return
 			}
-		case <-ctx.Done():
-			return
+		}
+	})
+
+	for m := range params.metricsChannel {
+		metricsHolder.Store(m)
+	}
+	twg.Wait()
+
+	lastBatch := metricsHolder.Load()
+	if !maps.Equal(lastBatch, lastSentMetrics) {
+		workChan <- lastBatch
+	}
+	close(workChan)
+	workersWg.Wait()
+}
+
+func worker(ctx context.Context, c chan map[string]agentMetric, params SendParams) {
+	for metrics := range c {
+		err := sendMetricBatch(ctx, metrics, params)
+		if err != nil {
+			params.logger.Error("Error sending metrics batch", zap.Error(err))
 		}
 	}
 }
 
-func worker(ctx context.Context, logger *zap.Logger, c chan map[string]AgentMetric, serverAddress, hashKey string, client *http.Client) {
-	for {
-		select {
-		case metrics := <-c:
-			err := sendMetricBatch(metrics, serverAddress, hashKey, client)
-			if err != nil {
-				logger.Error("Error sending metrics batch", zap.Error(err))
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func sendMetricBatch(metrics map[string]AgentMetric, serverAddress, hashKey string, client *http.Client) error {
+func sendMetricBatch(ctx context.Context, metrics map[string]agentMetric, params SendParams) error {
 	var buf bytes.Buffer
 	var payload []models.Metrics
 	for k, v := range metrics {
@@ -88,39 +129,47 @@ func sendMetricBatch(metrics map[string]AgentMetric, serverAddress, hashKey stri
 		return nil
 	}
 
-	d, err := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("error marshalling data: %w", err)
 	}
 
 	zw, err := compress.NewWriter(&buf)
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating compressor: %w", err)
 	}
 
-	_, err = zw.Write(d)
+	_, err = zw.Write(jsonData)
 	if err != nil {
-		return err
+		return fmt.Errorf("error writing compressed data: %w", err)
 	}
 
 	err = zw.Close()
 	if err != nil {
-		return err
+		return fmt.Errorf("error closing compress writer: %w", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, serverAddress+"/updates", &buf)
+	reqData := buf.Bytes()
+	if params.publicKey != nil {
+		reqData, err = crypto.Encrypt(params.publicKey, reqData)
+		if err != nil {
+			return fmt.Errorf("error encrypting data: %w", err)
+		}
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, params.serverAddress+"/updates", bytes.NewBuffer(reqData))
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Content-Encoding", "gzip")
 	request.Header.Set("Content-Type", "application/json")
 
-	if hashKey != "" {
-		hash := utils.GenSHA256(buf.Bytes(), hashKey)
+	if params.hashKey != "" {
+		hash := utils.GenSHA256(reqData, params.hashKey)
 		request.Header.Set(utils.HashHeaderName, hex.EncodeToString(hash))
 	}
 
-	resp, err := client.Do(request)
+	resp, err := params.client.Do(request)
 	if err != nil {
 		return err
 	}

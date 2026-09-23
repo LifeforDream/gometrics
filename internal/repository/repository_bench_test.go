@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 // benchMetricsBatch строит батч метрик того же размера, что типичный
@@ -17,14 +16,14 @@ func benchMetricsBatch(n int) []models.Metrics {
 			batch = append(batch, models.Metrics{
 				ID:    "PollCount",
 				MType: models.Counter,
-				Delta: utils.IntPtr(int64(i)),
+				Delta: new(int64(i)),
 			})
 			continue
 		}
 		batch = append(batch, models.Metrics{
 			ID:    "GaugeMetric",
 			MType: models.Gauge,
-			Value: utils.FloatPtr(float64(i) * 1.5),
+			Value: new(float64(i) * 1.5),
 		})
 	}
 	return batch

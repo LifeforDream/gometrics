@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,10 +17,12 @@ import (
 
 	"github.com/LifeforDream/gometrics/internal/audit"
 	"github.com/LifeforDream/gometrics/internal/buildinfo"
+	"github.com/LifeforDream/gometrics/internal/crypto"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
 	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
+	"github.com/LifeforDream/gometrics/internal/middlewares/mwcrypto"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwhash"
 	"github.com/LifeforDream/gometrics/internal/middlewares/mwip"
 	"github.com/LifeforDream/gometrics/internal/repository"
@@ -44,7 +48,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
 	var (
@@ -92,11 +96,27 @@ func main() {
 		}
 	}
 
+	var privateKey *rsa.PrivateKey
+	if serverOptions.CryptoKeyPath != "" {
+		privateKey, err = crypto.LoadPrivateKey(serverOptions.CryptoKeyPath)
+		if err != nil {
+			logger.Fatal("Error loading private key with configured path", zap.String("crypto-path", serverOptions.CryptoKeyPath), zap.Error(err))
+		}
+	}
+
 	svc := service.NewMetricService(repo, auditor)
 	h := handler.NewHandler(svc, logger)
 	srv := &http.Server{
-		Addr:    serverOptions.RunAddr,
-		Handler: router.MetricsRouter(h, logs.WithLogging(logger), mwip.WithClientIP, mwhash.WithHash(serverOptions.HashKey, logger), middleware.StripSlashes, mwcompress.Compress(logger)),
+		Addr: serverOptions.RunAddr,
+		Handler: router.MetricsRouter(
+			h,
+			logs.WithLogging(logger),
+			mwip.WithClientIP,
+			mwhash.WithHash(serverOptions.HashKey, logger),
+			mwcrypto.WithCrypto(privateKey, logger),
+			middleware.StripSlashes,
+			mwcompress.Compress(logger),
+		),
 	}
 
 	serverErr := make(chan error, 1)
@@ -108,12 +128,11 @@ func main() {
 	}()
 
 	select {
-	case <-ctx.Done(): //SIGINT
+	case <-ctx.Done():
 	case err := <-serverErr:
 		logger.Fatal("Failed to start application", zap.Error(err))
 	}
 
-	// after SIGINT we give server 5 seconds to cleanup
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	err = srv.Shutdown(shutdownCtx)

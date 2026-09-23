@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -15,8 +16,8 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 )
 
-func buildMemStatsSnapshot(memStats runtime.MemStats, pollCount int) map[string]AgentMetric {
-	return map[string]AgentMetric{
+func buildMemStatsSnapshot(memStats runtime.MemStats, pollCount int) map[string]agentMetric {
+	return map[string]agentMetric{
 		"Alloc":         {Type: models.Gauge, Value: float64(memStats.Alloc)},
 		"BuckHashSys":   {Type: models.Gauge, Value: float64(memStats.BuckHashSys)},
 		"Frees":         {Type: models.Gauge, Value: float64(memStats.Frees)},
@@ -49,19 +50,19 @@ func buildMemStatsSnapshot(memStats runtime.MemStats, pollCount int) map[string]
 	}
 }
 
-func buildPsUtilSnapshot(m *mem.VirtualMemoryStat, cpudata []float64) map[string]AgentMetric {
-	ret := map[string]AgentMetric{
+func buildPsUtilSnapshot(m *mem.VirtualMemoryStat, cpudata []float64) map[string]agentMetric {
+	ret := map[string]agentMetric{
 		"TotalMemory": {Type: models.Gauge, Value: float64(m.Total)},
 		"FreeMemory":  {Type: models.Gauge, Value: float64(m.Free)},
 	}
 	for core, v := range cpudata {
 		k := fmt.Sprintf("CPUutilization%d", core+1)
-		ret[k] = AgentMetric{Type: models.Gauge, Value: v}
+		ret[k] = agentMetric{Type: models.Gauge, Value: v}
 	}
 	return ret
 }
 
-func collectMemStats(ctx context.Context, interval int, c chan map[string]AgentMetric) {
+func collectMemStats(ctx context.Context, interval int, c chan map[string]agentMetric) {
 	var memStats runtime.MemStats
 	pollCount := 0
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
@@ -79,7 +80,7 @@ func collectMemStats(ctx context.Context, interval int, c chan map[string]AgentM
 	}
 }
 
-func collectPsUtil(ctx context.Context, interval int, c chan map[string]AgentMetric, logger *zap.Logger) {
+func collectPsUtil(ctx context.Context, interval int, c chan map[string]agentMetric, logger *zap.Logger) {
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
 
@@ -105,12 +106,14 @@ func collectPsUtil(ctx context.Context, interval int, c chan map[string]AgentMet
 	}
 }
 
-func collect(ctx context.Context, interval int, c chan map[string]AgentMetric, logger *zap.Logger) {
-	colChan := make(chan map[string]AgentMetric, 2) // 2 goroutines = 2 slots
-	metricMap := make(map[string]AgentMetric)
+func collect(ctx context.Context, interval int, c chan map[string]agentMetric, logger *zap.Logger) {
+	colChan := make(chan map[string]agentMetric, 2) // 2 goroutines = 2 slots
+	metricMap := make(map[string]agentMetric)
 
-	go collectMemStats(ctx, interval, colChan)
-	go collectPsUtil(ctx, interval, colChan, logger)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); collectMemStats(ctx, interval, colChan) }()
+	go func() { defer wg.Done(); collectPsUtil(ctx, interval, colChan, logger) }()
 
 	for {
 		select {
@@ -123,6 +126,8 @@ func collect(ctx context.Context, interval int, c chan map[string]AgentMetric, l
 			}
 			c <- maps.Clone(metricMap)
 		case <-ctx.Done():
+			wg.Wait()
+			close(c)
 			return
 		}
 	}
