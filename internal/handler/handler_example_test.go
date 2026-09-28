@@ -15,7 +15,6 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 // exampleRequest issues an HTTP request without a body against a test
@@ -126,7 +125,7 @@ func ExampleHandler_GetMetric() {
 	svc.UpdateGauge(context.Background(), models.Metrics{
 		ID:    "Alloc",
 		MType: models.Gauge,
-		Value: utils.FloatPtr(1.25),
+		Value: new(1.25),
 	})
 
 	h := NewHandler(svc, zap.NewNop())

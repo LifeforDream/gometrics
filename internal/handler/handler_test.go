@@ -21,7 +21,6 @@ import (
 	models "github.com/LifeforDream/gometrics/internal/model"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/service"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 func testRequest(t *testing.T, ts *httptest.Server, method, path string) (*http.Response, string) {
@@ -56,12 +55,12 @@ func TestGetMetrics(t *testing.T) {
 		},
 		{
 			name:  "a counter",
-			input: []models.Metrics{{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(1)}},
+			input: []models.Metrics{{ID: "pollcount", MType: "counter", Delta: new(int64(1))}},
 			want:  []metric{{"counter", "pollcount", float64(1)}},
 		},
 		{
 			name:  "a gauge",
-			input: []models.Metrics{{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)}},
+			input: []models.Metrics{{ID: "alloc", MType: "gauge", Value: new(1.25)}},
 			want:  []metric{{"gauge", "alloc", 1.25}},
 		},
 	}
@@ -316,8 +315,8 @@ func (s *stubService) Ping(ctx context.Context) error {
 func TestGetMetricJson(t *testing.T) {
 	logger := zap.NewNop()
 	defaultservice := service.NewMetricService(repository.NewMemStorage(), &audit.Auditor{})
-	defaultservice.UpdateCounter(t.Context(), models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)})
-	defaultservice.UpdateGauge(t.Context(), models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)})
+	defaultservice.UpdateCounter(t.Context(), models.Metrics{ID: "pollcount", MType: "counter", Delta: new(int64(2))})
+	defaultservice.UpdateGauge(t.Context(), models.Metrics{ID: "alloc", MType: "gauge", Value: new(1.25)})
 
 	type want struct {
 		statusCode int
@@ -335,14 +334,14 @@ func TestGetMetricJson(t *testing.T) {
 			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"pollcount","type":"counter"}`,
-			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)}},
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "pollcount", MType: "counter", Delta: new(int64(2))}},
 		},
 		{
 			name:        "valid gauge request",
 			svc:         defaultservice,
 			contentType: "application/json",
 			rawBody:     `{"id":"alloc","type":"gauge"}`,
-			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)}},
+			want:        want{statusCode: http.StatusOK, metric: models.Metrics{ID: "alloc", MType: "gauge", Value: new(1.25)}},
 		},
 		{
 			name:        "wrong content type",

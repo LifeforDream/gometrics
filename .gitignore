@@ -18,6 +18,7 @@ cmd/server/main
 cmd/server/server
 cmd/linter/linter
 cmd/reset/reset
+cmd/certgen/certgen
 
 # Dependency directories (remove the comment below to include it)
 vendor/
@@ -26,3 +27,7 @@ vendor/
 .idea
 .vscode
 .claude
+
+# generated certificates
+cert.pem
+private.pem

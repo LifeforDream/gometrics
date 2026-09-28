@@ -51,8 +51,8 @@ func TestGetMetrics(t *testing.T) {
 			name: "get gauge and a counter",
 			repo: repository.NewMemStorage(),
 			input: []models.Metrics{
-				{MType: "counter", ID: "pollcount", Delta: utils.IntPtr(2)},
-				{MType: "gauge", ID: "alloc", Value: utils.FloatPtr(1.25)},
+				{MType: "counter", ID: "pollcount", Delta: new(int64(2))},
+				{MType: "gauge", ID: "alloc", Value: new(1.25)},
 			},
 			want: []string{
 				"pollcount 2",
@@ -100,7 +100,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "get valid counter",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: new(int64(2))},
 			},
 			input: input{
 				name:       "pollcount",
@@ -113,7 +113,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "get valid gauge",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)},
+				{ID: "alloc", MType: "gauge", Value: new(1.25)},
 			},
 			input: input{
 				name:       "alloc",
@@ -135,7 +135,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "incorrect metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: new(int64(2))},
 			},
 			input: input{
 				name:       "pollcount",
@@ -147,7 +147,7 @@ func TestGetMetricValue(t *testing.T) {
 			name: "invalid metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: new(int64(2))},
 			},
 			input: input{
 				name:       "pollcount",
@@ -262,8 +262,8 @@ func TestUpdateMetrics(t *testing.T) {
 		{
 			name: "mixed batch applied",
 			input: []models.Metrics{
-				{ID: "alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "alloc", MType: models.Gauge, Value: new(1.25)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			verify: func(t *testing.T, s *MetricService) {
 				g, err := s.GetMetric(t.Context(), models.Gauge, "alloc")
@@ -277,9 +277,9 @@ func TestUpdateMetrics(t *testing.T) {
 		},
 		{
 			name:  "counter accumulates over existing value",
-			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(2)}},
+			setUp: []models.Metrics{{ID: "pollcount", MType: models.Counter, Delta: new(int64(2))}},
 			input: []models.Metrics{
-				{ID: "pollcount", MType: models.Counter, Delta: utils.IntPtr(3)},
+				{ID: "pollcount", MType: models.Counter, Delta: new(int64(3))},
 			},
 			verify: func(t *testing.T, s *MetricService) {
 				c, err := s.GetMetric(t.Context(), models.Counter, "pollcount")
@@ -289,7 +289,7 @@ func TestUpdateMetrics(t *testing.T) {
 		},
 		{
 			name:    "error propagated from repository",
-			input:   []models.Metrics{{ID: "bad", MType: "invalid", Value: utils.FloatPtr(1.0)}},
+			input:   []models.Metrics{{ID: "bad", MType: "invalid", Value: new(1.0)}},
 			wantErr: true,
 		},
 	}
@@ -358,20 +358,20 @@ func TestGetMetric(t *testing.T) {
 			name: "get valid counter",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: new(int64(2))},
 			},
 			input:   input{"pollcount", "counter"},
-			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
+			want:    models.Metrics{ID: "pollcount", MType: "counter", Delta: new(int64(2))},
 			wantErr: false,
 		},
 		{
 			name: "get valid gauge",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)},
+				{ID: "alloc", MType: "gauge", Value: new(1.25)},
 			},
 			input:   input{"alloc", "gauge"},
-			want:    models.Metrics{ID: "alloc", MType: "gauge", Value: utils.FloatPtr(1.25)},
+			want:    models.Metrics{ID: "alloc", MType: "gauge", Value: new(1.25)},
 			wantErr: false,
 		},
 		{
@@ -384,7 +384,7 @@ func TestGetMetric(t *testing.T) {
 			name: "incorrect metric type",
 			repo: repository.NewMemStorage(),
 			setUp: []models.Metrics{
-				{ID: "pollcount", MType: "counter", Delta: utils.IntPtr(2)},
+				{ID: "pollcount", MType: "counter", Delta: new(int64(2))},
 			},
 			input:   input{"pollcount", "gauge"},
 			wantErr: true,
@@ -436,14 +436,14 @@ func TestAuditNotifiedOnSuccessfulUpdates(t *testing.T) {
 		{
 			name: "UpdateGauge",
 			call: func(s *MetricService) error {
-				return s.UpdateGauge(ctx, models.Metrics{ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)})
+				return s.UpdateGauge(ctx, models.Metrics{ID: "Alloc", MType: models.Gauge, Value: new(1.25)})
 			},
 			wantIDs: []string{"Alloc"},
 		},
 		{
 			name: "UpdateCounter",
 			call: func(s *MetricService) error {
-				return s.UpdateCounter(ctx, models.Metrics{ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(1)})
+				return s.UpdateCounter(ctx, models.Metrics{ID: "PollCount", MType: models.Counter, Delta: new(int64(1))})
 			},
 			wantIDs: []string{"PollCount"},
 		},
@@ -451,8 +451,8 @@ func TestAuditNotifiedOnSuccessfulUpdates(t *testing.T) {
 			name: "UpdateMetrics batch reports all metrics in one call",
 			call: func(s *MetricService) error {
 				return s.UpdateMetrics(ctx, []models.Metrics{
-					{ID: "Alloc", MType: models.Gauge, Value: utils.FloatPtr(1.25)},
-					{ID: "PollCount", MType: models.Counter, Delta: utils.IntPtr(1)},
+					{ID: "Alloc", MType: models.Gauge, Value: new(1.25)},
+					{ID: "PollCount", MType: models.Counter, Delta: new(int64(1))},
 				})
 			},
 			wantIDs: []string{"Alloc", "PollCount"},
@@ -502,13 +502,13 @@ func TestAuditNotNotifiedOnFailedUpdates(t *testing.T) {
 				require.NoError(t, s.UpdateCounterByName(ctx, "PollCount", 1))
 			},
 			call: func(s *MetricService) error {
-				return s.UpdateGauge(ctx, models.Metrics{ID: "PollCount", MType: models.Gauge, Value: utils.FloatPtr(1.0)})
+				return s.UpdateGauge(ctx, models.Metrics{ID: "PollCount", MType: models.Gauge, Value: new(1.0)})
 			},
 		},
 		{
 			name: "UpdateMetrics batch with invalid metric type",
 			call: func(s *MetricService) error {
-				return s.UpdateMetrics(ctx, []models.Metrics{{ID: "bad", MType: "invalid", Value: utils.FloatPtr(1.0)}})
+				return s.UpdateMetrics(ctx, []models.Metrics{{ID: "bad", MType: "invalid", Value: new(1.0)}})
 			},
 		},
 	}
