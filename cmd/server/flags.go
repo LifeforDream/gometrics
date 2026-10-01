@@ -29,6 +29,7 @@ type ServerOptions struct {
 	AuditURL       string `env:"AUDIT_URL"`         // URL для отправки аудита по HTTP; флаг -audit-url, по умолчанию ""
 	CryptoKeyPath  string `env:"CRYPTO_KEY"`        // путь к файлу с приватным ключом для расшифровки запросов
 	ConfigFilename string `env:"CONFIG"`            // путь к файлу с конфигурацией в JSON
+	TrustedSubnet  string `env:"TRUSTED_SUBNET"`    // CIDR подсети доверенных IP-адресов
 }
 
 // fileConfig — конфигурация сервера из JSON-файла: те же поля, что и
@@ -47,6 +48,7 @@ type fileConfig struct {
 	AuditFilePath *string `json:"audit_file"`
 	AuditURL      *string `json:"audit_url"`
 	CryptoKeyPath *string `json:"crypto_key"`
+	TrustedSubnet *string `json:"trusted_subnet"`
 }
 
 func parseOptions(args ...string) (*ServerOptions, error) {
@@ -70,6 +72,7 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 	fs.StringVar(&serverOptions.CryptoKeyPath, "crypto-key", "", "filepath to a private key storage")
 	fs.StringVar(&serverOptions.ConfigFilename, "c", "", "filepath to .json file with configuration options")
 	fs.StringVar(&serverOptions.ConfigFilename, "config", "", "same as -c")
+	fs.StringVar(&serverOptions.TrustedSubnet, "t", "", "trusted subnet CIDR")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %w", err)
@@ -133,5 +136,8 @@ func applyFileConfig(opts *ServerOptions, cfg *fileConfig, explicit map[string]b
 	}
 	if cfg.CryptoKeyPath != nil && !explicit["crypto-key"] {
 		opts.CryptoKeyPath = *cfg.CryptoKeyPath
+	}
+	if cfg.TrustedSubnet != nil && !explicit["t"] {
+		opts.TrustedSubnet = *cfg.TrustedSubnet
 	}
 }

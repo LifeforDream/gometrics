@@ -46,6 +46,11 @@ func main() {
 		}
 	}
 
+	hostIP, err := agent.OutboundIP(serverAddr)
+	if err != nil {
+		logger.Fatal("error getting outbound IP address", zap.Error(err))
+	}
+
 	cfg := agent.Config{
 		PollInterval:       agentOptions.PollInterval,
 		ReportInterval:     agentOptions.ReportInterval,
@@ -53,6 +58,7 @@ func main() {
 		HashKey:            agentOptions.HashKey,
 		ConcurrentRequests: agentOptions.ConcurrentRequests,
 		PublicKey:          publicKey,
+		HostIP:             hostIP.String(),
 	}
 
 	a := agent.New(cfg)

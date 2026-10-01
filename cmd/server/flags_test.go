@@ -34,6 +34,7 @@ func TestParseOptions(t *testing.T) {
 				"-audit-file", "audit_a.log",
 				"-audit-url", "http://a.example/audit",
 				"-crypto-key", "/path/from/flag.pem",
+				"-t", "10.0.0.0/8",
 				"-c", configPath,
 			},
 			envParams: map[string]string{
@@ -47,6 +48,7 @@ func TestParseOptions(t *testing.T) {
 				"AUDIT_FILE":        "audit_b.log",
 				"AUDIT_URL":         "http://b.example/audit",
 				"CRYPTO_KEY":        "/path/from/env.pem",
+				"TRUSTED_SUBNET":    "192.168.0.0/24",
 				"CONFIG":            configPath,
 			},
 			expected: ServerOptions{
@@ -60,6 +62,7 @@ func TestParseOptions(t *testing.T) {
 				AuditFilePath:  "audit_b.log",
 				AuditURL:       "http://b.example/audit",
 				CryptoKeyPath:  "/path/from/env.pem",
+				TrustedSubnet:  "192.168.0.0/24",
 				ConfigFilename: configPath,
 			},
 		},
@@ -151,6 +154,30 @@ func TestParseOptions(t *testing.T) {
 				AuditURL:      "",
 			},
 		},
+		{
+			name:      "trusted subnet from flag",
+			args:      []string{"-t", "10.0.0.0/8"},
+			envParams: map[string]string{},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				TrustedSubnet: "10.0.0.0/8",
+			},
+		},
+		{
+			name:      "trusted subnet from env only",
+			args:      []string{},
+			envParams: map[string]string{"TRUSTED_SUBNET": "192.168.0.0/24"},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				TrustedSubnet: "192.168.0.0/24",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -170,6 +197,7 @@ func TestParseOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.AuditURL, result.AuditURL)
 			assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
 			assert.Equal(t, tt.expected.ConfigFilename, result.ConfigFilename)
+			assert.Equal(t, tt.expected.TrustedSubnet, result.TrustedSubnet)
 		})
 	}
 }
@@ -197,7 +225,8 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				"store_interval": 5,
 				"store_file": "/tmp/config-file.db",
 				"database_dsn": "postgres://cfg",
-				"crypto_key": "/path/from/config.pem"
+				"crypto_key": "/path/from/config.pem",
+				"trusted_subnet": "172.16.0.0/12"
 			}`,
 			expected: ServerOptions{
 				RunAddr:       "localhost:9090",
@@ -207,6 +236,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				ToRestore:     false,
 				DatabaseDsn:   "postgres://cfg",
 				CryptoKeyPath: "/path/from/config.pem",
+				TrustedSubnet: "172.16.0.0/12",
 			},
 		},
 		{
@@ -231,6 +261,30 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				DatabaseDsn:   "postgres://cfg",
 				ToRestore:     true,
 				StoreInterval: 300,
+			},
+		},
+		{
+			name:    "explicit -t flag overrides trusted_subnet from config",
+			content: `{"trusted_subnet": "172.16.0.0/12"}`,
+			args:    []string{"-t", "10.0.0.0/8"},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				TrustedSubnet: "10.0.0.0/8",
+			},
+		},
+		{
+			name:      "TRUSTED_SUBNET env overrides config",
+			content:   `{"trusted_subnet": "172.16.0.0/12"}`,
+			envParams: map[string]string{"TRUSTED_SUBNET": "192.168.0.0/24"},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				TrustedSubnet: "192.168.0.0/24",
 			},
 		},
 		{
@@ -261,6 +315,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 			assert.Equal(t, tt.expected.ToRestore, result.ToRestore)
 			assert.Equal(t, tt.expected.DatabaseDsn, result.DatabaseDsn)
 			assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
+			assert.Equal(t, tt.expected.TrustedSubnet, result.TrustedSubnet)
 		})
 	}
 }

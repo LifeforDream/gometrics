@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/rsa"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -20,11 +20,6 @@ import (
 	"github.com/LifeforDream/gometrics/internal/crypto"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
-	"github.com/LifeforDream/gometrics/internal/middlewares/logs"
-	"github.com/LifeforDream/gometrics/internal/middlewares/mwcompress"
-	"github.com/LifeforDream/gometrics/internal/middlewares/mwcrypto"
-	"github.com/LifeforDream/gometrics/internal/middlewares/mwhash"
-	"github.com/LifeforDream/gometrics/internal/middlewares/mwip"
 	"github.com/LifeforDream/gometrics/internal/repository"
 	"github.com/LifeforDream/gometrics/internal/router"
 	"github.com/LifeforDream/gometrics/internal/service"
@@ -100,22 +95,30 @@ func main() {
 	if serverOptions.CryptoKeyPath != "" {
 		privateKey, err = crypto.LoadPrivateKey(serverOptions.CryptoKeyPath)
 		if err != nil {
-			logger.Fatal("Error loading private key with configured path", zap.String("crypto-path", serverOptions.CryptoKeyPath), zap.Error(err))
+			logger.Fatal("Error loading private key with configured path",
+				zap.String("crypto-path", serverOptions.CryptoKeyPath),
+				zap.Error(err),
+			)
+		}
+	}
+
+	var tnet *net.IPNet
+	if serverOptions.TrustedSubnet != "" {
+		_, tnet, err = net.ParseCIDR(serverOptions.TrustedSubnet)
+		if err != nil {
+			logger.Fatal("invalid trusted network parameter", zap.String("network-CIDR", serverOptions.TrustedSubnet), zap.Error(err))
 		}
 	}
 
 	svc := service.NewMetricService(repo, auditor)
 	h := handler.NewHandler(svc, logger)
+	core, readMws, writeMws := buildChains(newMiddlewares(serverOptions.HashKey, privateKey, tnet, logger))
 	srv := &http.Server{
 		Addr: serverOptions.RunAddr,
-		Handler: router.MetricsRouter(
-			h,
-			logs.WithLogging(logger),
-			mwip.WithClientIP,
-			mwhash.WithHash(serverOptions.HashKey, logger),
-			mwcrypto.WithCrypto(privateKey, logger),
-			middleware.StripSlashes,
-			mwcompress.Compress(logger),
+		Handler: router.MetricsRouter(h,
+			router.NewChain(core...),
+			router.NewChain(readMws...),
+			router.NewChain(writeMws...),
 		),
 	}
 

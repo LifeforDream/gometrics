@@ -241,6 +241,37 @@ func TestSendMetricBatchWithoutCryptoKeyIsUnchanged(t *testing.T) {
 	assert.ElementsMatch(t, []models.Metrics{{ID: "alloc", MType: models.Gauge, Value: new(1.25)}}, got)
 }
 
+func TestSendMetricBatchSetsRealIPHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		hostIP string
+	}{
+		{name: "IPv4 host address", hostIP: "192.168.0.42"},
+		{name: "IPv6 host address", hostIP: "2001:db8::1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			realIPCh := make(chan string, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				realIPCh <- r.Header.Get("X-Real-IP")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			err := sendMetricBatch(context.TODO(), map[string]agentMetric{
+				"alloc": {Type: models.Gauge, Value: 1.25},
+			}, SendParams{
+				serverAddress: server.URL,
+				client:        &http.Client{},
+				hostIP:        tt.hostIP,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.hostIP, <-realIPCh)
+		})
+	}
+}
+
 // TestMetricHolderConcurrentAccess проверяет, что metricHolder безопасен для
 // конкурентного доступа: одна горутина в send() пишет через Store, тикер и
 // финальный сброс читают через Load — гонки быть не должно (проверяется под

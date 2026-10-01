@@ -23,16 +23,16 @@ type httpSender interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Config — настройки агента: интервалы опроса и отправки, адрес сервера,
-// ключ подписи тела запроса и число одновременных запросов к серверу.
+// Config — настройки агента.
 type Config struct {
-	PollInterval       int
-	ReportInterval     int
-	ServerAddr         string
-	HashKey            string
-	ConcurrentRequests int
-	PublicKey          *rsa.PublicKey
-	Client             httpSender // клиент для отправки запросов, может быть подменён в тестах.
+	PollInterval       int            // интервал опроса метрик.
+	ReportInterval     int            // интервал отправки метрик.
+	ServerAddr         string         // адрес сервера для отправки метрик.
+	HashKey            string         // ключ для хэширования тела запроса.
+	ConcurrentRequests int            // максимальное количество одновременно отправляемых запросов.
+	PublicKey          *rsa.PublicKey // публичный ключ для шифрования тела запросов.
+	Client             httpSender     // клиент для отправки запросов, может быть подменён в тестах.
+	HostIP             string         // исходящий IP-адрес хоста, на котором запущен агент.
 }
 
 // Agent запускает сбор и отправку метрик согласно переданному Config.
@@ -71,6 +71,7 @@ func (a *Agent) Run(ctx context.Context, logger *zap.Logger) {
 			concurrentRequests: a.cfg.ConcurrentRequests,
 			publicKey:          a.cfg.PublicKey,
 			client:             a.cfg.Client,
+			hostIP:             a.cfg.HostIP,
 		})
 	}()
 }

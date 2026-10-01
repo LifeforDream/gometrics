@@ -31,6 +31,7 @@ type SendParams struct {
 	concurrentRequests int
 	publicKey          *rsa.PublicKey
 	client             httpSender
+	hostIP             string
 }
 
 type metricHolder struct {
@@ -163,6 +164,7 @@ func sendMetricBatch(ctx context.Context, metrics map[string]agentMetric, params
 	}
 	request.Header.Set("Content-Encoding", "gzip")
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Real-IP", params.hostIP)
 
 	if params.hashKey != "" {
 		hash := utils.GenSHA256(reqData, params.hashKey)
