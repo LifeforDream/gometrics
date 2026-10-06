@@ -62,3 +62,49 @@ func TestOutboundIP(t *testing.T) {
 		})
 	}
 }
+
+func TestOutboundIPHostPort(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostport string
+		want     string // пустая строка — проверяется только IsLoopback
+		wantErr  bool
+	}{
+		{
+			name:     "IPv4 loopback with port",
+			hostport: "127.0.0.1:8080",
+			want:     "127.0.0.1",
+		},
+		{
+			name:     "hostname is resolved",
+			hostport: "localhost:8080",
+		},
+		{
+			name:     "missing port is an error",
+			hostport: "127.0.0.1",
+			wantErr:  true,
+		},
+		{
+			name:     "empty hostport is an error",
+			hostport: "",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := OutboundIPHostPort(tt.hostport)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.True(t, got.IsLoopback(), "expected loopback address, got %s", got)
+			if tt.want != "" {
+				assert.Equal(t, tt.want, got.String())
+			}
+		})
+	}
+}

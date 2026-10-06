@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -46,7 +47,12 @@ func main() {
 		}
 	}
 
-	hostIP, err := agent.OutboundIP(serverAddr)
+	var hostIP net.IP
+	if agentOptions.GRPCAddr != "" {
+		hostIP, err = agent.OutboundIPHostPort(agentOptions.GRPCAddr)
+	} else {
+		hostIP, err = agent.OutboundIP(serverAddr)
+	}
 	if err != nil {
 		logger.Fatal("error getting outbound IP address", zap.Error(err))
 	}
@@ -59,9 +65,13 @@ func main() {
 		ConcurrentRequests: agentOptions.ConcurrentRequests,
 		PublicKey:          publicKey,
 		HostIP:             hostIP.String(),
+		GRPCAddr:           agentOptions.GRPCAddr,
 	}
 
-	a := agent.New(cfg)
+	a, err := agent.New(cfg)
+	if err != nil {
+		logger.Fatal("error starting agent", zap.Error(err))
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
@@ -71,4 +81,8 @@ func main() {
 	<-ctx.Done()
 
 	a.Wait()
+
+	if err := a.Close(); err != nil {
+		logger.Error("error closing agent", zap.Error(err))
+	}
 }

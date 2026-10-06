@@ -1,37 +1,32 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"crypto/rsa"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
-	"net/http"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/LifeforDream/gometrics/internal/compress"
-	"github.com/LifeforDream/gometrics/internal/crypto"
 	models "github.com/LifeforDream/gometrics/internal/model"
-	"github.com/LifeforDream/gometrics/internal/utils"
 )
+
+// sendTimeout ограничивает отправку одного батча метрик.
+const sendTimeout = 30 * time.Second
 
 // SendParams хранит параметры для запуска функции send() агента
 type SendParams struct {
 	logger             *zap.Logger
 	interval           int
 	metricsChannel     chan map[string]agentMetric
-	serverAddress      string
-	hashKey            string
 	concurrentRequests int
-	publicKey          *rsa.PublicKey
-	client             httpSender
-	hostIP             string
+	sender             batchSender
+}
+
+type batchSender interface {
+	Send(context.Context, []models.Metrics) error
+	Close() error
 }
 
 type metricHolder struct {
@@ -99,16 +94,20 @@ func send(ctx context.Context, params SendParams) {
 }
 
 func worker(ctx context.Context, c chan map[string]agentMetric, params SendParams) {
+	// WithoutCancel, чтобы отправить последний батч метрик
+	// после отмены контекста в рамках gracefulShutdown.
+	base := context.WithoutCancel(ctx)
 	for metrics := range c {
-		err := sendMetricBatch(ctx, metrics, params)
+		sendCtx, cancel := context.WithTimeout(base, sendTimeout)
+		err := sendMetricBatch(sendCtx, metrics, params)
+		cancel()
 		if err != nil {
 			params.logger.Error("Error sending metrics batch", zap.Error(err))
 		}
 	}
 }
 
-func sendMetricBatch(ctx context.Context, metrics map[string]agentMetric, params SendParams) error {
-	var buf bytes.Buffer
+func toModelMetrics(metrics map[string]agentMetric) ([]models.Metrics, error) {
 	var payload []models.Metrics
 	for k, v := range metrics {
 		metric := models.Metrics{}
@@ -121,62 +120,25 @@ func sendMetricBatch(ctx context.Context, metrics map[string]agentMetric, params
 		case models.Gauge:
 			metric.Value = &v.Value
 		default:
-			return fmt.Errorf("unsupported metric type: %s", v.Type)
+			return nil, fmt.Errorf("unsupported metric type: %s", v.Type)
 		}
 		payload = append(payload, metric)
+	}
+	return payload, nil
+}
+
+func sendMetricBatch(ctx context.Context, metrics map[string]agentMetric, params SendParams) error {
+	payload, err := toModelMetrics(metrics)
+	if err != nil {
+		return fmt.Errorf("error converting metrics: %w", err)
 	}
 
 	if len(payload) == 0 {
 		return nil
 	}
-
-	jsonData, err := json.Marshal(payload)
+	err = params.sender.Send(ctx, payload)
 	if err != nil {
-		return fmt.Errorf("error marshalling data: %w", err)
+		return fmt.Errorf("error sending metrics: %w", err)
 	}
-
-	zw, err := compress.NewWriter(&buf)
-	if err != nil {
-		return fmt.Errorf("error creating compressor: %w", err)
-	}
-
-	_, err = zw.Write(jsonData)
-	if err != nil {
-		return fmt.Errorf("error writing compressed data: %w", err)
-	}
-
-	err = zw.Close()
-	if err != nil {
-		return fmt.Errorf("error closing compress writer: %w", err)
-	}
-
-	reqData := buf.Bytes()
-	if params.publicKey != nil {
-		reqData, err = crypto.Encrypt(params.publicKey, reqData)
-		if err != nil {
-			return fmt.Errorf("error encrypting data: %w", err)
-		}
-	}
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, params.serverAddress+"/updates", bytes.NewBuffer(reqData))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Encoding", "gzip")
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Real-IP", params.hostIP)
-
-	if params.hashKey != "" {
-		hash := utils.GenSHA256(reqData, params.hashKey)
-		request.Header.Set(utils.HashHeaderName, hex.EncodeToString(hash))
-	}
-
-	resp, err := params.client.Do(request)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
 	return nil
 }

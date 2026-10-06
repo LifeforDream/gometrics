@@ -30,6 +30,7 @@ type ServerOptions struct {
 	CryptoKeyPath  string `env:"CRYPTO_KEY"`        // путь к файлу с приватным ключом для расшифровки запросов
 	ConfigFilename string `env:"CONFIG"`            // путь к файлу с конфигурацией в JSON
 	TrustedSubnet  string `env:"TRUSTED_SUBNET"`    // CIDR подсети доверенных IP-адресов
+	GRPCAddr       string `env:"GRPC_ADDRESS"`      // адрес для сервера GRPC
 }
 
 // fileConfig — конфигурация сервера из JSON-файла: те же поля, что и
@@ -49,6 +50,7 @@ type fileConfig struct {
 	AuditURL      *string `json:"audit_url"`
 	CryptoKeyPath *string `json:"crypto_key"`
 	TrustedSubnet *string `json:"trusted_subnet"`
+	GRPCAddr      *string `json:"grpc_address"`
 }
 
 func parseOptions(args ...string) (*ServerOptions, error) {
@@ -73,6 +75,7 @@ func parseOptions(args ...string) (*ServerOptions, error) {
 	fs.StringVar(&serverOptions.ConfigFilename, "c", "", "filepath to .json file with configuration options")
 	fs.StringVar(&serverOptions.ConfigFilename, "config", "", "same as -c")
 	fs.StringVar(&serverOptions.TrustedSubnet, "t", "", "trusted subnet CIDR")
+	fs.StringVar(&serverOptions.GRPCAddr, "g", "", "address and port to run grpc server; empty disables gRPC")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, fmt.Errorf("error parsing args: %w", err)
@@ -139,5 +142,8 @@ func applyFileConfig(opts *ServerOptions, cfg *fileConfig, explicit map[string]b
 	}
 	if cfg.TrustedSubnet != nil && !explicit["t"] {
 		opts.TrustedSubnet = *cfg.TrustedSubnet
+	}
+	if cfg.GRPCAddr != nil && !explicit["g"] {
+		opts.GRPCAddr = *cfg.GRPCAddr
 	}
 }

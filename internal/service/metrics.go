@@ -182,6 +182,9 @@ func (s *MetricService) UpdateMetrics(ctx context.Context, metrics []models.Metr
 // ValidateMetric проверяет, что тип метрики известен и соответствующее
 // ему поле (Delta для counter, Value для gauge) заполнено.
 func (s *MetricService) ValidateMetric(metric models.Metrics) error {
+	if metric.ID == "" {
+		return myErrors.ErrEmptyMetricID
+	}
 	switch metric.MType {
 	case models.Counter:
 		if metric.Delta == nil {

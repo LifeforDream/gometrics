@@ -36,6 +36,7 @@ func TestParseOptions(t *testing.T) {
 				"-crypto-key", "/path/from/flag.pem",
 				"-t", "10.0.0.0/8",
 				"-c", configPath,
+				"-g", "localhost:5432",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
@@ -50,6 +51,7 @@ func TestParseOptions(t *testing.T) {
 				"CRYPTO_KEY":        "/path/from/env.pem",
 				"TRUSTED_SUBNET":    "192.168.0.0/24",
 				"CONFIG":            configPath,
+				"GRPC_ADDRESS":      "localhost:9876",
 			},
 			expected: ServerOptions{
 				RunAddr:        "localhost:8082",
@@ -64,6 +66,7 @@ func TestParseOptions(t *testing.T) {
 				CryptoKeyPath:  "/path/from/env.pem",
 				TrustedSubnet:  "192.168.0.0/24",
 				ConfigFilename: configPath,
+				GRPCAddr:       "localhost:9876",
 			},
 		},
 		{
@@ -123,6 +126,7 @@ func TestParseOptions(t *testing.T) {
 				ToRestore:     true,
 				DatabaseDsn:   "",
 				HashKey:       "",
+				GRPCAddr:      "",
 			},
 		},
 		{
@@ -178,6 +182,18 @@ func TestParseOptions(t *testing.T) {
 				TrustedSubnet: "192.168.0.0/24",
 			},
 		},
+		{
+			name:      "gRPC disabled by default",
+			args:      []string{},
+			envParams: map[string]string{},
+			expected: ServerOptions{
+				RunAddr:       "localhost:8080",
+				LogLevel:      "info",
+				StoreInterval: 300,
+				ToRestore:     true,
+				GRPCAddr:      "",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,7 +242,8 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				"store_file": "/tmp/config-file.db",
 				"database_dsn": "postgres://cfg",
 				"crypto_key": "/path/from/config.pem",
-				"trusted_subnet": "172.16.0.0/12"
+				"trusted_subnet": "172.16.0.0/12",
+				"grpc_address": "localhost:5432"
 			}`,
 			expected: ServerOptions{
 				RunAddr:       "localhost:9090",
@@ -237,6 +254,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				DatabaseDsn:   "postgres://cfg",
 				CryptoKeyPath: "/path/from/config.pem",
 				TrustedSubnet: "172.16.0.0/12",
+				GRPCAddr:      "localhost:5432",
 			},
 		},
 		{
@@ -249,6 +267,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				DatabaseDsn:   "postgres://cfg",
 				ToRestore:     true,
 				StoreInterval: 300,
+				GRPCAddr:      "",
 			},
 		},
 		{
@@ -261,6 +280,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				DatabaseDsn:   "postgres://cfg",
 				ToRestore:     true,
 				StoreInterval: 300,
+				GRPCAddr:      "",
 			},
 		},
 		{
@@ -273,6 +293,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				StoreInterval: 300,
 				ToRestore:     true,
 				TrustedSubnet: "10.0.0.0/8",
+				GRPCAddr:      "",
 			},
 		},
 		{
@@ -285,6 +306,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				StoreInterval: 300,
 				ToRestore:     true,
 				TrustedSubnet: "192.168.0.0/24",
+				GRPCAddr:      "",
 			},
 		},
 		{
@@ -296,6 +318,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 				LogLevel:      "info",
 				StoreInterval: 300,
 				ToRestore:     true,
+				GRPCAddr:      "",
 			},
 		},
 	}
@@ -316,6 +339,7 @@ func TestParseOptionsAppliesConfigFile(t *testing.T) {
 			assert.Equal(t, tt.expected.DatabaseDsn, result.DatabaseDsn)
 			assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
 			assert.Equal(t, tt.expected.TrustedSubnet, result.TrustedSubnet)
+			assert.Equal(t, tt.expected.GRPCAddr, result.GRPCAddr)
 		})
 	}
 }

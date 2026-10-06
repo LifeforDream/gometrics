@@ -8,16 +8,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/LifeforDream/gometrics/internal/audit"
 	"github.com/LifeforDream/gometrics/internal/buildinfo"
 	"github.com/LifeforDream/gometrics/internal/crypto"
+	"github.com/LifeforDream/gometrics/internal/grpcserver"
 	"github.com/LifeforDream/gometrics/internal/handler"
 	"github.com/LifeforDream/gometrics/internal/logging"
 	"github.com/LifeforDream/gometrics/internal/repository"
@@ -111,9 +114,27 @@ func main() {
 	}
 
 	svc := service.NewMetricService(repo, auditor)
+
+	serverErr := make(chan error, 2)
+
+	var grpcSrv *grpc.Server
+	if serverOptions.GRPCAddr != "" {
+		lis, err := net.Listen("tcp", serverOptions.GRPCAddr)
+		if err != nil {
+			logger.Fatal("Error listening gRPC address", zap.String("address", serverOptions.GRPCAddr))
+		}
+		grpcSrv = grpcserver.New(svc, tnet, logger)
+		go func() {
+			logger.Info("running gRPC server", zap.String("address", serverOptions.GRPCAddr))
+			if err := grpcSrv.Serve(lis); err != nil {
+				serverErr <- err
+			}
+		}()
+	}
+
 	h := handler.NewHandler(svc, logger)
 	core, readMws, writeMws := buildChains(newMiddlewares(serverOptions.HashKey, privateKey, tnet, logger))
-	srv := &http.Server{
+	httpSrv := &http.Server{
 		Addr: serverOptions.RunAddr,
 		Handler: router.MetricsRouter(h,
 			router.NewChain(core...),
@@ -122,10 +143,9 @@ func main() {
 		),
 	}
 
-	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("Running server", zap.String("address", serverOptions.RunAddr))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Info("Running HTTP server", zap.String("address", serverOptions.RunAddr))
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
 	}()
@@ -138,9 +158,9 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err = srv.Shutdown(shutdownCtx)
+	err = shutdownServers(shutdownCtx, httpSrv, grpcSrv)
 	if err != nil {
-		logger.Fatal("Failed to gracefully shutdown the server", zap.Error(err))
+		logger.Error("Failed to gracefully shutdown the server", zap.Error(err))
 	}
 
 	err = repo.Close()
@@ -148,4 +168,24 @@ func main() {
 		logger.Error("Error closing repo", zap.Error(err))
 	}
 	auditor.Close()
+}
+
+// shutdownServers служит для запуска gracefulShutdown нескольких серверов.
+func shutdownServers(ctx context.Context, httpServ *http.Server, grpcSrv *grpc.Server) error {
+	var wg sync.WaitGroup
+	if grpcSrv != nil {
+		wg.Go(func() {
+			done := make(chan struct{})
+			go func() { grpcSrv.GracefulStop(); close(done) }()
+			select {
+			case <-done:
+			case <-ctx.Done():
+				grpcSrv.Stop()
+				<-done
+			}
+		})
+	}
+	err := httpServ.Shutdown(ctx)
+	wg.Wait()
+	return err
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"testing/synctest"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -20,13 +21,14 @@ func TestAgentRunWaitGracefulShutdown(t *testing.T) {
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
-		a := New(Config{
+		a, err := New(Config{
 			PollInterval:       3600,
 			ReportInterval:     3600,
 			ServerAddr:         "http://fake.invalid",
 			ConcurrentRequests: 2,
 			Client:             client,
 		})
+		require.NoError(t, err)
 
 		a.Run(ctx, logger)
 		cancel()
@@ -46,13 +48,14 @@ func TestAgentWaitBlocksUntilShutdownComplete(t *testing.T) {
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
-		a := New(Config{
+		a, err := New(Config{
 			PollInterval:       3600,
 			ReportInterval:     3600,
 			ServerAddr:         "http://fake.invalid",
 			ConcurrentRequests: 1,
 			Client:             client,
 		})
+		require.NoError(t, err)
 		a.Run(ctx, logger)
 
 		waitReturned := make(chan struct{})
@@ -88,13 +91,14 @@ func TestAgentEndToEndFlushesDataOnShutdown(t *testing.T) {
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
-		a := New(Config{
+		a, err := New(Config{
 			PollInterval:       1,
 			ReportInterval:     1,
 			ServerAddr:         "http://fake.invalid",
 			ConcurrentRequests: 2,
 			Client:             client,
 		})
+		require.NoError(t, err)
 		a.Run(ctx, logger)
 
 		<-hit
