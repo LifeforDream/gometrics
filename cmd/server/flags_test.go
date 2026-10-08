@@ -28,7 +28,7 @@ func TestParseOptions(t *testing.T) {
 				"-l", "debug",
 				"-i", "350",
 				"-f", "m.json",
-				"-r", "f",
+				"-r=f",
 				"-d", "postgres://u:u@localhost/db",
 				"-k", "a",
 				"-audit-file", "audit_a.log",
@@ -37,6 +37,7 @@ func TestParseOptions(t *testing.T) {
 				"-t", "10.0.0.0/8",
 				"-c", configPath,
 				"-g", "localhost:5432",
+				"-grpc-cert", "/path/from/flag.pem",
 			},
 			envParams: map[string]string{
 				"ADDRESS":           "localhost:8082",
@@ -52,6 +53,7 @@ func TestParseOptions(t *testing.T) {
 				"TRUSTED_SUBNET":    "192.168.0.0/24",
 				"CONFIG":            configPath,
 				"GRPC_ADDRESS":      "localhost:9876",
+				"GRPC_TLS_CERT":     "/path/from/env.pem",
 			},
 			expected: ServerOptions{
 				RunAddr:        "localhost:8082",
@@ -67,6 +69,7 @@ func TestParseOptions(t *testing.T) {
 				TrustedSubnet:  "192.168.0.0/24",
 				ConfigFilename: configPath,
 				GRPCAddr:       "localhost:9876",
+				GRPCTLSCert:    "/path/from/env.pem",
 			},
 		},
 		{
@@ -214,6 +217,8 @@ func TestParseOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
 			assert.Equal(t, tt.expected.ConfigFilename, result.ConfigFilename)
 			assert.Equal(t, tt.expected.TrustedSubnet, result.TrustedSubnet)
+			assert.Equal(t, tt.expected.GRPCAddr, result.GRPCAddr)
+			assert.Equal(t, tt.expected.GRPCTLSCert, result.GRPCTLSCert)
 		})
 	}
 }

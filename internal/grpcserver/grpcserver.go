@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
@@ -62,18 +64,25 @@ func (ms *MetricsServer) UpdateMetrics(ctx context.Context, req *pb.UpdateMetric
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		ms.logger.Error("unexpected error", zap.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, "internal server error while updating metrics")
 	}
 	return &pb.UpdateMetricsResponse{}, nil
 }
 
 // New создаёт grpc-сервер для обработки метрик.
 // Запуск и остановка должны производиться извне.
-func New(svc MetricUpdater, network *net.IPNet, logger *zap.Logger) *grpc.Server {
-	s := grpc.NewServer(grpc.ChainUnaryInterceptor(
-		ClientIPInterceptor(),
-		TrustedSubnetInterceptor(network),
-	))
+// Если creds не переданы, сервер использует plaintext.
+func New(svc MetricUpdater, network *net.IPNet, logger *zap.Logger, creds credentials.TransportCredentials) *grpc.Server {
+	if creds == nil {
+		creds = insecure.NewCredentials()
+	}
+	s := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			ClientIPInterceptor(),
+			TrustedSubnetInterceptor(network),
+		),
+		grpc.Creds(creds),
+	)
 	pb.RegisterMetricsServer(s, &MetricsServer{svc: svc, logger: logger})
 	return s
 }

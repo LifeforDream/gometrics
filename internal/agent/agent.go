@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc/credentials"
 )
 
 // agentMetric — одна собранная метрика перед отправкой на сервер.
@@ -26,15 +27,16 @@ type httpSender interface {
 
 // Config — настройки агента.
 type Config struct {
-	PollInterval       int            // интервал опроса метрик.
-	ReportInterval     int            // интервал отправки метрик.
-	ServerAddr         string         // адрес сервера для отправки метрик.
-	HashKey            string         // ключ для хэширования тела запроса.
-	ConcurrentRequests int            // максимальное количество одновременно отправляемых запросов.
-	PublicKey          *rsa.PublicKey // публичный ключ для шифрования тела запросов.
-	Client             httpSender     // клиент для отправки запросов, может быть подменён в тестах.
-	HostIP             string         // исходящий IP-адрес хоста, на котором запущен агент.
-	GRPCAddr           string         //адрес для отправки метрик по gRPC
+	PollInterval       int                              // интервал опроса метрик.
+	ReportInterval     int                              // интервал отправки метрик.
+	ServerAddr         string                           // адрес сервера для отправки метрик.
+	HashKey            string                           // ключ для хэширования тела запроса.
+	ConcurrentRequests int                              // максимальное количество одновременно отправляемых запросов.
+	PublicKey          *rsa.PublicKey                   // публичный ключ для шифрования тела запросов.
+	Client             httpSender                       // клиент для отправки запросов, может быть подменён в тестах.
+	HostIP             string                           // исходящий IP-адрес хоста, на котором запущен агент.
+	GRPCAddr           string                           // адрес для отправки метрик по gRPC.
+	GRPCCreds          credentials.TransportCredentials // креды для отправки метрик по gRPC.
 }
 
 // Agent запускает сбор и отправку метрик согласно переданному Config.
@@ -51,7 +53,7 @@ func New(cfg Config) (*Agent, error) {
 	}
 	var sender batchSender
 	if cfg.GRPCAddr != "" {
-		grpcsender, err := newGRPCBatchSender(cfg.GRPCAddr, cfg.HostIP)
+		grpcsender, err := newGRPCBatchSender(cfg.GRPCAddr, cfg.HostIP, cfg.GRPCCreds)
 		if err != nil {
 			return nil, fmt.Errorf("error creating agent with grpc: %w", err)
 		}

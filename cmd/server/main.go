@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/tls"
 	"log"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/LifeforDream/gometrics/internal/audit"
 	"github.com/LifeforDream/gometrics/internal/buildinfo"
@@ -118,12 +120,30 @@ func main() {
 	serverErr := make(chan error, 2)
 
 	var grpcSrv *grpc.Server
+
 	if serverOptions.GRPCAddr != "" {
+		var creds credentials.TransportCredentials
+		if (serverOptions.CryptoKeyPath == "" && serverOptions.GRPCTLSCert != "") ||
+			(serverOptions.CryptoKeyPath != "" && serverOptions.GRPCTLSCert == "") {
+			logger.Fatal("certificate paths for gRPC are incomplete",
+				zap.String("crypto-path", serverOptions.CryptoKeyPath),
+				zap.String("cert-path", serverOptions.GRPCTLSCert))
+		}
+		if serverOptions.CryptoKeyPath != "" && serverOptions.GRPCTLSCert != "" {
+			cert, err := tls.LoadX509KeyPair(serverOptions.GRPCTLSCert, serverOptions.CryptoKeyPath)
+			if err != nil {
+				logger.Fatal("error loading certificate for gRPC", zap.Error(err))
+			}
+			creds = credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+			})
+		}
 		lis, err := net.Listen("tcp", serverOptions.GRPCAddr)
 		if err != nil {
 			logger.Fatal("Error listening gRPC address", zap.String("address", serverOptions.GRPCAddr))
 		}
-		grpcSrv = grpcserver.New(svc, tnet, logger)
+
+		grpcSrv = grpcserver.New(svc, tnet, logger, creds)
 		go func() {
 			logger.Info("running gRPC server", zap.String("address", serverOptions.GRPCAddr))
 			if err := grpcSrv.Serve(lis); err != nil {

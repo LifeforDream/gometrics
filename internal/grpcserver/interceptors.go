@@ -14,8 +14,6 @@ import (
 	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
-const realIPKey = "x-real-ip"
-
 // ClientIPInterceptor забирает IP клиента и кладёт в контекст.
 // Сначала проверяется metadata, потом адрес отправителя.
 func ClientIPInterceptor() grpc.UnaryServerInterceptor {
@@ -23,7 +21,7 @@ func ClientIPInterceptor() grpc.UnaryServerInterceptor {
 		md, ok := metadata.FromIncomingContext(ctx)
 		var ipstr string
 		if ok {
-			ipmd := md.Get(realIPKey)
+			ipmd := md.Get(utils.RealIPKey)
 			for _, val := range ipmd {
 				if val != "" {
 					ipstr = strings.TrimSpace(val)

@@ -36,21 +36,21 @@ func TestClientIPInterceptor(t *testing.T) {
 		{
 			name: "takes IP from x-real-ip metadata",
 			ctx: func() context.Context {
-				return metadata.NewIncomingContext(context.Background(), metadata.Pairs(realIPKey, "10.0.0.5"))
+				return metadata.NewIncomingContext(context.Background(), metadata.Pairs(utils.RealIPKey, "10.0.0.5"))
 			},
 			wantIP: "10.0.0.5",
 		},
 		{
 			name: "trims whitespace from metadata value",
 			ctx: func() context.Context {
-				return metadata.NewIncomingContext(context.Background(), metadata.Pairs(realIPKey, "  10.0.0.5  "))
+				return metadata.NewIncomingContext(context.Background(), metadata.Pairs(utils.RealIPKey, "  10.0.0.5  "))
 			},
 			wantIP: "10.0.0.5",
 		},
 		{
 			name: "falls back to peer address when metadata is empty",
 			ctx: func() context.Context {
-				ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(realIPKey, ""))
+				ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(utils.RealIPKey, ""))
 				return peer.NewContext(ctx, &peer.Peer{Addr: &net.TCPAddr{IP: net.ParseIP("1.2.3.4"), Port: 1234}})
 			},
 			wantIP: "1.2.3.4",

@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	models "github.com/LifeforDream/gometrics/internal/model"
 	pb "github.com/LifeforDream/gometrics/internal/proto"
+	"github.com/LifeforDream/gometrics/internal/utils"
 )
 
 const grpcServiceConfig = `{
@@ -25,18 +27,20 @@ const grpcServiceConfig = `{
 	}]
 }`
 
-const realIPKey = "x-real-ip"
-
 type grpcBatchSender struct {
 	conn   *grpc.ClientConn
 	client pb.MetricsClient
 	hostIP string
 }
 
-func newGRPCBatchSender(addr, hostIP string, opts ...grpc.DialOption) (*grpcBatchSender, error) {
+func newGRPCBatchSender(addr, hostIP string, creds credentials.TransportCredentials, opts ...grpc.DialOption) (*grpcBatchSender, error) {
 	base := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(grpcServiceConfig),
+	}
+	if creds != nil {
+		base = append(base, grpc.WithTransportCredentials(creds))
+	} else {
+		base = append(base, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	conn, err := grpc.NewClient(addr, append(base, opts...)...)
 	if err != nil {
@@ -50,7 +54,7 @@ func (s *grpcBatchSender) Send(ctx context.Context, metrics []models.Metrics) er
 	if err != nil {
 		return fmt.Errorf("error converting metrics: %w", err)
 	}
-	ctx = metadata.AppendToOutgoingContext(ctx, realIPKey, s.hostIP)
+	ctx = metadata.AppendToOutgoingContext(ctx, utils.RealIPKey, s.hostIP)
 	req := pb.UpdateMetricsRequest_builder{Metrics: pbmetrics}.Build()
 
 	_, err = s.client.UpdateMetrics(ctx, req)
@@ -71,9 +75,15 @@ func toProto(metrics []models.Metrics) ([]*pb.Metric, error) {
 		switch metric.MType {
 		case models.Counter:
 			pbmetricbuilder.Type = pb.Metric_COUNTER
+			if metric.Delta == nil {
+				return nil, fmt.Errorf("counter metric %s has nil Delta", metric.ID)
+			}
 			pbmetricbuilder.Delta = *metric.Delta
 		case models.Gauge:
 			pbmetricbuilder.Type = pb.Metric_GAUGE
+			if metric.Value == nil {
+				return nil, fmt.Errorf("gauge metric %s has nil Value", metric.ID)
+			}
 			pbmetricbuilder.Value = *metric.Value
 		default:
 			return nil, fmt.Errorf("invalid metric type: %s", metric.MType)
