@@ -75,8 +75,8 @@ func TestEnvFlagOrder(t *testing.T) {
 	}{
 		{
 			name:      "all envs overwrite flags",
-			args:      []string{"-a", "localhost:8080", "--secure", "-p", "2", "-r", "10", "-k", "sec", "-l", "1", "-crypto-key", "/path/from/flag.pem", "-c", configPath},
-			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11", "KEY": "secret", "RATE_LIMIT": "2", "CRYPTO_KEY": "/path/from/env.pem", "CONFIG": configPath},
+			args:      []string{"-a", "localhost:8080", "--secure", "-p", "2", "-r", "10", "-k", "sec", "-l", "1", "-crypto-key", "/path/from/flag.pem", "-c", configPath, "-g", "localhost:5432"},
+			envParams: map[string]string{"ADDRESS": "localhost:8082", "POLL_INTERVAL": "3", "REPORT_INTERVAL": "11", "KEY": "secret", "RATE_LIMIT": "2", "CRYPTO_KEY": "/path/from/env.pem", "CONFIG": configPath, "GRPC_ADDRESS": "localhost:9876"},
 			expected: AgentOptions{
 				Address:            "localhost:8082",
 				Secure:             true,
@@ -86,6 +86,7 @@ func TestEnvFlagOrder(t *testing.T) {
 				ConcurrentRequests: 2,
 				CryptoKeyPath:      "/path/from/env.pem",
 				ConfigFilename:     configPath,
+				GRPCAddr:           "localhost:9876",
 			},
 			wantErr: false,
 		},
@@ -177,6 +178,7 @@ func TestEnvFlagOrder(t *testing.T) {
 			assert.Equal(t, tt.expected.ConcurrentRequests, result.ConcurrentRequests)
 			assert.Equal(t, tt.expected.CryptoKeyPath, result.CryptoKeyPath)
 			assert.Equal(t, tt.expected.ConfigFilename, result.ConfigFilename)
+			assert.Equal(t, tt.expected.GRPCAddr, result.GRPCAddr)
 
 		})
 	}

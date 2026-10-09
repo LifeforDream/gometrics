@@ -1,4 +1,4 @@
-.PHONY: build-server run-server build-agent run-agent loadtest
+.PHONY: build-server run-server build-agent run-agent loadtest genproto
 
 build-server:
 	go build -o cmd/server/server ./cmd/server
@@ -32,3 +32,10 @@ genreset: clear-genreset
 
 gencert:
 	go build -o cmd/certgen/certgen ./cmd/certgen && ./cmd/certgen/certgen -o . -b 4096
+
+genproto:
+	protoc -I api/proto \
+		--go_out=internal/proto --go_opt=paths=source_relative \
+		--go-grpc_out=internal/proto --go-grpc_opt=paths=source_relative \
+		--go_opt=default_api_level=API_OPAQUE \
+		api/proto/metrics.proto

@@ -109,10 +109,12 @@ func TestSendMetricBatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotErr := sendMetricBatch(context.TODO(), tt.metrics, SendParams{
-				serverAddress: server.URL,
-				hashKey:       tt.hashKey,
-				publicKey:     tt.cryptoPub,
-				client:        client,
+				sender: &httpBatchSender{
+					serverAddress: server.URL,
+					hashKey:       tt.hashKey,
+					publicKey:     tt.cryptoPub,
+					client:        client,
+				},
 			})
 			if tt.wantErr {
 				assert.Error(t, gotErr)
@@ -179,9 +181,11 @@ func TestSendMetricBatchEncryptsWhenCryptoKeyConfigured(t *testing.T) {
 
 	client := &http.Client{}
 	err = sendMetricBatch(context.TODO(), metrics, SendParams{
-		serverAddress: server.URL,
-		publicKey:     pub,
-		client:        client,
+		sender: &httpBatchSender{
+			serverAddress: server.URL,
+			publicKey:     pub,
+			client:        client,
+		},
 	})
 	require.NoError(t, err)
 
@@ -223,8 +227,10 @@ func TestSendMetricBatchWithoutCryptoKeyIsUnchanged(t *testing.T) {
 
 	client := &http.Client{}
 	err := sendMetricBatch(context.TODO(), metrics, SendParams{
-		serverAddress: server.URL,
-		client:        client,
+		sender: &httpBatchSender{
+			serverAddress: server.URL,
+			client:        client,
+		},
 	})
 	require.NoError(t, err)
 
@@ -239,6 +245,39 @@ func TestSendMetricBatchWithoutCryptoKeyIsUnchanged(t *testing.T) {
 	var got []models.Metrics
 	require.NoError(t, json.Unmarshal(body, &got))
 	assert.ElementsMatch(t, []models.Metrics{{ID: "alloc", MType: models.Gauge, Value: new(1.25)}}, got)
+}
+
+func TestSendMetricBatchSetsRealIPHeader(t *testing.T) {
+	tests := []struct {
+		name   string
+		hostIP string
+	}{
+		{name: "IPv4 host address", hostIP: "192.168.0.42"},
+		{name: "IPv6 host address", hostIP: "2001:db8::1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			realIPCh := make(chan string, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				realIPCh <- r.Header.Get("X-Real-IP")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			err := sendMetricBatch(context.TODO(), map[string]agentMetric{
+				"alloc": {Type: models.Gauge, Value: 1.25},
+			}, SendParams{
+				sender: &httpBatchSender{
+					serverAddress: server.URL,
+					client:        &http.Client{},
+					hostIP:        tt.hostIP,
+				},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.hostIP, <-realIPCh)
+		})
+	}
 }
 
 // TestMetricHolderConcurrentAccess проверяет, что metricHolder безопасен для
@@ -274,7 +313,7 @@ func TestWorkerExitsWhenChannelClosed(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			worker(context.TODO(), c, SendParams{logger: zap.NewNop(), client: client})
+			worker(context.TODO(), c, SendParams{logger: zap.NewNop(), sender: &httpBatchSender{client: client}})
 		}()
 
 		<-done
@@ -324,9 +363,8 @@ func TestSendFlushesFinalBatchAndShutsDownGracefully(t *testing.T) {
 			logger:             logger,
 			interval:           3600, // тикеру незачем срабатывать в этом тесте
 			metricsChannel:     c,
-			serverAddress:      "http://fake.invalid",
 			concurrentRequests: 2,
-			client:             client,
+			sender:             &httpBatchSender{serverAddress: "http://fake.invalid", client: client},
 		})
 
 		// последний снимок метрик перед остановкой продюсера (аналог collect,
@@ -368,9 +406,8 @@ func TestSendNoHTTPCallWhenNothingCollectedBeforeShutdown(t *testing.T) {
 				logger:             logger,
 				interval:           3600,
 				metricsChannel:     c,
-				serverAddress:      "http://fake.invalid",
 				concurrentRequests: 1,
-				client:             client,
+				sender:             &httpBatchSender{serverAddress: "http://fake.invalid", client: client},
 			})
 		}()
 
@@ -411,9 +448,8 @@ func TestSendTickerFiresThenShutsDownWithoutPanic(t *testing.T) {
 				logger:             logger,
 				interval:           1,
 				metricsChannel:     c,
-				serverAddress:      "http://fake.invalid",
 				concurrentRequests: 2,
-				client:             client,
+				sender:             &httpBatchSender{serverAddress: "http://fake.invalid", client: client},
 			})
 		}()
 

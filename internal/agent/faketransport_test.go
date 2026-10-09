@@ -28,6 +28,9 @@ func newFakeTransport(handler http.HandlerFunc) *fakeTransport {
 
 // RoundTrip реализует http.RoundTripper.
 func (f *fakeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := req.Context().Err(); err != nil {
+		return nil, err
+	}
 	srvConn, cliConn := net.Pipe()
 	go f.serve(srvConn)
 

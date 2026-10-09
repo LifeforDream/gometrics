@@ -25,8 +25,9 @@ type AgentOptions struct {
 	HashKey string `env:"KEY"`
 	// ConcurrentRequests — максимум одновременных запросов к серверу; флаг -l, по умолчанию 1
 	ConcurrentRequests int    `env:"RATE_LIMIT"`
-	CryptoKeyPath      string `env:"CRYPTO_KEY"` // путь к файлу с публичным ключом для шифрования запросов
-	ConfigFilename     string `env:"CONFIG"`     // путь к файлу с конфигурацией в JSON
+	CryptoKeyPath      string `env:"CRYPTO_KEY"`   // путь к файлу с публичным ключом для шифрования запросов
+	ConfigFilename     string `env:"CONFIG"`       // путь к файлу с конфигурацией в JSON
+	GRPCAddr           string `env:"GRPC_ADDRESS"` // адрес сервера GRPC
 }
 
 // fileConfig — конфигурация агента из JSON-файла: те же поля, что и
@@ -42,6 +43,7 @@ type fileConfig struct {
 	HashKey            *string `json:"key"`
 	ConcurrentRequests *int    `json:"concurrent_requests"`
 	CryptoKeyPath      *string `json:"crypto_key"`
+	GRPCAddr           *string `json:"grpc_address"`
 }
 
 func parseOptions(args ...string) (*AgentOptions, error) {
@@ -62,6 +64,7 @@ func parseOptions(args ...string) (*AgentOptions, error) {
 	fs.StringVar(&agentOptions.CryptoKeyPath, "crypto-key", "", "filepath to a public key storage")
 	fs.StringVar(&agentOptions.ConfigFilename, "c", "", "filepath to .json file with configuration options")
 	fs.StringVar(&agentOptions.ConfigFilename, "config", "", "same as -c")
+	fs.StringVar(&agentOptions.GRPCAddr, "g", "", "address and port of a grpc server; empty disables gRPC")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -119,6 +122,9 @@ func applyFileConfig(opts *AgentOptions, cfg *fileConfig, explicit map[string]bo
 	}
 	if cfg.CryptoKeyPath != nil && !explicit["crypto-key"] {
 		opts.CryptoKeyPath = *cfg.CryptoKeyPath
+	}
+	if cfg.GRPCAddr != nil && !explicit["g"] {
+		opts.GRPCAddr = *cfg.GRPCAddr
 	}
 }
 

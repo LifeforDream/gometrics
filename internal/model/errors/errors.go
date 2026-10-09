@@ -21,6 +21,8 @@ var (
 	// ErrEmptyGaugeValue возвращается ValidateMetric, когда для метрики типа
 	// gauge не задано поле Value.
 	ErrEmptyGaugeValue = errors.New("empty value field for gauge")
+	// ErrEmptyMetricID возвращается ValidateMetric, когда у метрики не задано поле ID.
+	ErrEmptyMetricID = errors.New("empty metric ID")
 )
 
 // InvalidMetricType возвращается при попытке обновить существующую метрику

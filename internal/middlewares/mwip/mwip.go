@@ -1,11 +1,14 @@
-// Package mwip содержит chi-мидлвар, определяющий IP-адрес клиента и
-// кладущий его в контекст запроса.
+// Package mwip содержит chi-мидлвары, работающие с IP-адресом клиента:
+// определение адреса с сохранением в контекст запроса и проверку
+// вхождения адреса в доверенную подсеть.
 package mwip
 
 import (
 	"net"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 
 	"github.com/LifeforDream/gometrics/internal/utils"
 )
@@ -24,6 +27,32 @@ func WithClientIP(next http.Handler) http.Handler {
 	})
 }
 
+// WithTrustedSubnet — мидлвар chi: пропускает только запросы, чей IP-адрес
+// входит в доверенную подсеть network, остальным возвращает HTTP 403.
+//
+// Адрес берётся из заголовка X-Real-IP, а при его отсутствии — из RemoteAddr.
+// Нераспознаваемый адрес считается недоверенным. Если network == nil
+// (доверенная подсеть не задана), запросы пропускаются без проверки.
+func WithTrustedSubnet(network *net.IPNet, log *zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if network == nil {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := realIP(r)
+			if netIP := net.ParseIP(ip); netIP == nil || !network.Contains(netIP) {
+				log.Warn("client request not from trusted network",
+					zap.String("ip-address", ip),
+					zap.String("network CIDR", network.String()),
+				)
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func clientIP(r *http.Request) string {
 	if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
 		return ip
@@ -33,6 +62,19 @@ func clientIP(r *http.Request) string {
 			return ip
 		}
 	}
+	return remoteHost(r)
+}
+
+// realIP возвращает адрес из X-Real-IP, а при его отсутствии — хост из RemoteAddr.
+// X-Forwarded-For намеренно не учитывается.
+func realIP(r *http.Request) string {
+	if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
+		return ip
+	}
+	return remoteHost(r)
+}
+
+func remoteHost(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
